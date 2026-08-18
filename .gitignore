@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 logs
 *.log
 npm-debug.log*
@@ -21,3 +22,11 @@ dist-ssr
 *.sln
 *.sw?
 .env
+=======
+node_modules
+dist
+.env
+.v3
+.bolt
+tsconfig.tsbuildinfo
+>>>>>>> 2022f095fed3ca168261813115e8bdae04551837
