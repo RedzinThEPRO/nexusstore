@@ -1,6 +1,6 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
-import { Search, ShoppingCart, Bell, User, Menu, X, Gamepad2, Shield, LogOut, ChevronDown } from 'lucide-react';
+import { Search, ShoppingCart, Bell, User, Menu, X, Gamepad2, LogOut, ChevronDown } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { getNotifications, markAllNotificationsRead, markNotificationRead } from '@/lib/api';
@@ -8,7 +8,7 @@ import { timeAgo } from '@/lib/format';
 import type { Notification } from '@/types';
 
 export function Header() {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout } = useAuth();
   const { count } = useCart();
   const navigate = useNavigate();
   const location = useLocation();
@@ -161,11 +161,6 @@ export function Header() {
                       <Link to="/pedidos" onClick={() => setProfileOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-ink-200 hover:bg-white/5 hover:text-white">
                         <ShoppingCart className="h-4 w-4" /> Meus Pedidos
                       </Link>
-                      {isAdmin && (
-                        <Link to="/admin" onClick={() => setProfileOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-neon-300 hover:bg-neon-500/10">
-                          <Shield className="h-4 w-4" /> Painel Admin
-                        </Link>
-                      )}
                       <button onClick={() => { logout(); setProfileOpen(false); navigate('/'); }}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-danger-400 hover:bg-danger-500/10">
                         <LogOut className="h-4 w-4" /> Sair
