@@ -11,6 +11,6 @@ Deno.serve(async (request) => {
   const profileResponse = await fetch(url + '/rest/v1/profiles?id=eq.' + encodeURIComponent(user.id) + '&select=role', { headers:{ Authorization:'Bearer '+serviceRole, apikey:serviceRole } });
   const profiles = await profileResponse.json();
   if (!profileResponse.ok || profiles[0]?.role !== 'SUPER_ADMIN') return new Response(JSON.stringify({ error:'Forbidden' }), { status:403, headers:cors });
-  const response = await fetch('https://api.evopay.cash/v1/balance', { headers:{ 'API-Key':evopayKey } });
+  const response = await fetch('https://pix.evopay.cash/v1/balance', { headers:{ 'API-Key':evopayKey } });
   return new Response(await response.text(), { status:response.status, headers:cors });
 });
