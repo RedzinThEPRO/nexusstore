@@ -50,36 +50,9 @@ export function seedIfEmpty(): void {
 
   const now = new Date().toISOString();
 
-  // Demo admin + demo user
-  const admin: Profile = {
-    id: 'admin-001',
-    username: 'admin',
-    email: 'admin@nexus.gg',
-    role: 'SUPER_ADMIN',
-    first_name: 'Admin',
-    last_name: 'Nexus',
-    created_at: now,
-    updated_at: now,
-  };
-  const user: Profile = {
-    id: 'user-001',
-    username: 'gamer',
-    email: 'gamer@nexus.gg',
-    role: 'USER',
-    first_name: 'João',
-    last_name: 'Silva',
-    free_fire_id: '123456789',
-    created_at: now,
-    updated_at: now,
-  };
-  write(KEYS.profiles, [admin, user]);
-
-  // Credentials stored separately (demo only)
-  const creds = [
-    { id: 'admin-001', email: 'admin@nexus.gg', password: 'admin123' },
-    { id: 'user-001', email: 'gamer@nexus.gg', password: 'gamer123' },
-  ];
-  write('nx_creds', creds);
+  // Never seed users or credentials in the browser. Authentication is owned by Supabase Auth.
+  write(KEYS.profiles, [] as Profile[]);
+  write('nx_creds', []);
 
   // Categories (empty by default per user request — they create their own)
   write(KEYS.categories, [] as Category[]);
@@ -94,16 +67,8 @@ export function seedIfEmpty(): void {
   write(KEYS.reviews, [] as Review[]);
   write(KEYS.notifications, [] as Notification[]);
 
-  write(KEYS.coupons, [
-    {
-      id: 'cpn-001',
-      code: 'BEMVINDO10',
-      type: 'PERCENT',
-      value: 10,
-      active: true,
-      created_at: now,
-    },
-  ] as Coupon[]);
+  // Coupons are server-managed and must never be seeded into public browser storage.
+  write(KEYS.coupons, [] as Coupon[]);
 
   write(KEYS.audit, [] as AuditLog[]);
 
