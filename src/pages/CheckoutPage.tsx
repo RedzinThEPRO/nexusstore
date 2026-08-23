@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
-import { getCouponByCode, createOrder, createDelivery, addNotification, updateProduct, updateOrder } from '@/lib/api';
+import { getCouponByCode } from '@/lib/api';
 import { uid } from '@/lib/store';
 import { formatBRL, validateCPF, getAge, formatCPFInput } from '@/lib/format';
-import type { Order, OrderItem, Delivery, Notification } from '@/types';
+import type { OrderItem } from '@/types';
 import { EmptyState, Toast } from '@/components/ui';
 import { ShoppingCart, Shield, Zap, CheckCircle2, Copy, QrCode, ArrowRight, Package } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -83,53 +83,18 @@ export function CheckoutPage() {
       quantity: i.quantity, free_fire_id: i.free_fire_id,
     }));
 
-    const order: Order = {
-      id: supabase ? crypto.randomUUID() : uid('ord'), user_id: user.id, items: orderItems,
-      subtotal, discount, total, coupon_code: appliedCoupon?.code,
-      status: 'PENDING', payment_status: 'PENDING', delivery_status: 'PENDING',
-      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-    };
-    createOrder(order);
-    setOrderId(order.id);
     if (supabase) {
       setCreatingPayment(true);
-      const { data, error } = await supabase.functions.invoke('evopay-create-charge', { body: { orderId: order.id, amount: total, customer: { name: `${firstName} ${lastName}`, document: cpf, email: user.email }, items: orderItems } });
+      const { data, error } = await supabase.functions.invoke('evopay-create-charge', { body: { couponCode: appliedCoupon?.code, items: orderItems.map(i => ({ product_id: i.product_id, quantity: i.quantity, free_fire_id: i.free_fire_id })), customer: { name: `${firstName} ${lastName}`, document: cpf, email: user.email } } });
       setCreatingPayment(false);
       if (error || data?.error) { setToast(data?.error || error?.message || 'Não foi possível gerar o PIX.'); return; }
+      setOrderId(data.orderId);
       setPixCode(data?.pixCode || data?.qrCodeText || ''); setPixQr(data?.pixQr || data?.qrCodeBase64 || data?.qrCodeUrl || '');
+    } else {
+      setToast('Pagamento indisponível: configure o Supabase para processar pedidos.');
+      return;
     }
     setStep('payment');
-  };
-
-  const simulatePayment = () => {
-    updateOrder(orderId, { status: 'PAID', payment_status: 'PAID', updated_at: new Date().toISOString() });
-
-    items.forEach(item => {
-        const delivery: Delivery = {
-          id: uid('del'), order_id: orderId, user_id: user.id,
-          product_name: item.product.name, product_image: item.product.images[0] ?? '',
-          status: 'PENDING', free_fire_id: item.free_fire_id,
-          created_at: new Date().toISOString(),
-        };
-        createDelivery(delivery);
-
-        // Notification
-        const notif: Notification = {
-          id: uid('ntf'), user_id: user.id, type: 'order',
-          title: 'Compra realizada com sucesso!',
-          message: `Seu pedido de ${item.product.name} foi confirmado. A entrega será realizada em até 12 horas.`,
-          order_id: orderId, read: false, created_at: new Date().toISOString(),
-        };
-        addNotification(notif);
-      });
-
-      // Decrement stock
-      items.forEach(item => {
-        updateProduct(item.product.id, { stock: Math.max(0, item.product.stock - item.quantity) });
-      });
-
-    clear();
-    setStep('success');
   };
 
   const copyPix = () => {
@@ -180,11 +145,6 @@ export function CheckoutPage() {
           <div className="flex items-center justify-center gap-2 mb-4">
             <span className="chip-warning">Aguardando pagamento</span>
           </div>
-          {!supabase && (
-            <button onClick={simulatePayment} disabled={creatingPayment} className="btn-primary w-full py-3 text-base disabled:opacity-50">
-              <CheckCircle2 className="h-5 w-5" /> Simular Pagamento (Demo)
-            </button>
-          )}
           <p className="text-xs text-ink-400 mt-3">
             Em produção, o pagamento é confirmado automaticamente pelo webhook do gateway PIX.
           </p>
