@@ -508,3 +508,16 @@ CREATE POLICY chat_insert_scoped ON chat_messages FOR INSERT TO authenticated WI
 CREATE OR REPLACE FUNCTION public.is_admin() RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$ SELECT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'SUPER_ADMIN'); $$;
 REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
+
+
+-- INTEGRACOES: EvoPay, Resend e Storage seguro (idempotente)
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS provider_status TEXT;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS raw_response JSONB;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;
+ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS signature_valid BOOLEAN NOT NULL DEFAULT false;
+INSERT INTO storage.buckets (id,name,public,file_size_limit,allowed_mime_types) VALUES ('user-uploads','user-uploads',false,10485760,ARRAY['image/jpeg','image/png','image/webp','image/gif']) ON CONFLICT (id) DO UPDATE SET public=false,file_size_limit=10485760,allowed_mime_types=EXCLUDED.allowed_mime_types;
+DROP POLICY IF EXISTS user_uploads_read_own ON storage.objects; DROP POLICY IF EXISTS user_uploads_insert_own ON storage.objects; DROP POLICY IF EXISTS user_uploads_update_own ON storage.objects; DROP POLICY IF EXISTS user_uploads_delete_own ON storage.objects;
+CREATE POLICY user_uploads_read_own ON storage.objects FOR SELECT TO authenticated USING (bucket_id='user-uploads' AND (auth.uid()::text=(storage.foldername(name))[1] OR public.is_admin()));
+CREATE POLICY user_uploads_insert_own ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id='user-uploads' AND auth.uid()::text=(storage.foldername(name))[1]);
+CREATE POLICY user_uploads_update_own ON storage.objects FOR UPDATE TO authenticated USING (bucket_id='user-uploads' AND (auth.uid()::text=(storage.foldername(name))[1] OR public.is_admin())) WITH CHECK (bucket_id='user-uploads' AND (auth.uid()::text=(storage.foldername(name))[1] OR public.is_admin()));
+CREATE POLICY user_uploads_delete_own ON storage.objects FOR DELETE TO authenticated USING (bucket_id='user-uploads' AND (auth.uid()::text=(storage.foldername(name))[1] OR public.is_admin()));
