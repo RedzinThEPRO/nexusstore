@@ -1,5 +1,4 @@
 import { z } from "zod";
-
 const BASE_URL = "https://pix.evopay.cash/v1";
 const transactionSchema = z.object({ id: z.string().min(1), type: z.literal("DEPOSIT").optional(), status: z.string().min(1), amount: z.number().finite().positive(), taxAmount: z.number().finite().nonnegative().optional(), amountWithTax: z.number().finite().positive().optional(), qrCodeText: z.string().optional(), qrCodeBase64: z.string().optional(), qrCodeUrl: z.string().url().optional() }).strict();
 const responseSchema = z.union([transactionSchema, z.object({ data: transactionSchema }).strict()]).transform((body) => "data" in body ? body.data : body);
