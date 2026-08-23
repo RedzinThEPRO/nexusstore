@@ -96,7 +96,7 @@ export function CheckoutPage() {
       const { data, error } = await supabase.functions.invoke('evopay-create-charge', { body: { orderId: order.id, amount: total, customer: { name: `${firstName} ${lastName}`, document: cpf, email: user.email }, items: orderItems } });
       setCreatingPayment(false);
       if (error || data?.error) { setToast(data?.error || error?.message || 'Não foi possível gerar o PIX.'); return; }
-      setPixCode(data?.pixCode || data?.copyPaste || data?.qrCode || ''); setPixQr(data?.pixQr || data?.qrCodeImage || '');
+      setPixCode(data?.pixCode || data?.qrCodeText || ''); setPixQr(data?.pixQr || data?.qrCodeBase64 || data?.qrCodeUrl || '');
     }
     setStep('payment');
   };
