@@ -180,10 +180,11 @@ export function CheckoutPage() {
           <div className="flex items-center justify-center gap-2 mb-4">
             <span className="chip-warning">Aguardando pagamento</span>
           </div>
-
-          <button onClick={simulatePayment} disabled={creatingPayment} className="btn-primary w-full py-3 text-base disabled:opacity-50">
-            <CheckCircle2 className="h-5 w-5" /> Simular Pagamento (Demo)
-          </button>
+          {!supabase && (
+            <button onClick={simulatePayment} disabled={creatingPayment} className="btn-primary w-full py-3 text-base disabled:opacity-50">
+              <CheckCircle2 className="h-5 w-5" /> Simular Pagamento (Demo)
+            </button>
+          )}
           <p className="text-xs text-ink-400 mt-3">
             Em produção, o pagamento é confirmado automaticamente pelo webhook do gateway PIX.
           </p>
