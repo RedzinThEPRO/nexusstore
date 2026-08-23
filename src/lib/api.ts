@@ -1,4 +1,5 @@
 import { read, write, uid, slugify, STORE_KEYS } from './store';
+import { supabase } from '@/lib/supabase';
 import type {
   Profile, Category, Product, Order, Delivery, ChatMessage,
   Review, Notification, Coupon, CartItem, AuditLog,
