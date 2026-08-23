@@ -1,37 +1,21 @@
 # Segurança
 
-## RLS (Row Level Security)
+## Estado atual
 
-Todas as tabelas têm RLS habilitado. Políticas garantem:
-- Usuários só veem seus próprios pedidos, entregas, notificações
-- Admins têm acesso total
-- Produtos, categorias e avaliações são públicos para leitura
+A aplicação usa Supabase Auth + PostgreSQL como arquitetura de produção. O navegador nunca é uma fronteira de confiança: preços, cupons, estoque, permissões, totais e status de pedidos precisam ser recalculados e gravados por funções/rotas server-side.
 
-## Prevenção de ataques
+## RLS
 
-- **IDOR/BOLA**: Acesso a pedidos/entregas de outros usuários é bloqueado por RLS
-- **XSS**: React escapa conteúdo automaticamente; entradas de chat são renderizadas como texto
-- **SQL Injection**: Supabase usa parameterized queries
-- **Price manipulation**: Em produção, o backend recalcula preços (não confia no frontend)
-- **Webhook spoofing**: Validação de assinatura do gateway (preparado)
-- **Idempotência**: `payment_events` com `provider_event_id` único
+O `SUPABASE_SETUP.sql` habilita RLS e restringe perfis, pedidos, itens de pedido, entregas, chat, notificações, avaliações, cupons e logs. Clientes só leem os próprios dados; catálogo e avaliações são públicos apenas para leitura. A migração final remove a atualização de pedidos pelo cliente, fecha cupons para clientes e impede forjar mensagens administrativas.
 
-## Dados sensíveis
+## Autenticação administrativa
 
-- CPF e data de nascimento: acesso mínimo necessário
-- Não expostos em APIs desnecessárias
-- Protegidos por RLS
+Não existem contas, senhas, e-mails de recuperação ou códigos TOTP no código-fonte. Crie a conta administrativa no Supabase Auth, confirme o e-mail e habilite MFA TOTP no painel/fluxo de autenticação. O papel `SUPER_ADMIN` deve ser atribuído apenas por operação protegida no banco. O e-mail de recuperação não é uma conta de login separada.
 
-## Headers de segurança (para produção)
+## Limitações do modo demo
 
-Configure no seu host/CDN:
-- `X-Content-Type-Options: nosniff`
-- `X-Frame-Options: DENY`
-- `Strict-Transport-Security`
-- `Content-Security-Policy`
+O fallback local é apenas demonstração e não oferece segurança contra DevTools, XSS persistente ou manipulação de preços. Para produção, configure `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`, implemente checkout server-side/Edge Functions e nunca confie em dados enviados pelo cliente.
 
-## Recomendações
+## Produção
 
-- Use Cloudflare WAF na frente da aplicação
-- Configure rate limiting no Supabase
-- Monitore logs de auditoria
+Configure CSP, HSTS, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, rate limiting, validação de webhooks e envio de e-mails transacionais via provedor server-side.
