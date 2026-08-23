@@ -10,14 +10,7 @@ const schema = z.object({
   EVOPAY_API_KEY: z.string().min(1),
 });
 
-console.log("[env-diagnostic]", {
-  FRONTEND_URL: Boolean(process.env.FRONTEND_URL),
-  BACKEND_PUBLIC_URL: Boolean(process.env.BACKEND_PUBLIC_URL),
-  SUPABASE_URL: Boolean(process.env.SUPABASE_URL),
-  SUPABASE_SERVICE_ROLE_KEY: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-  EVOPAY_API_KEY: Boolean(process.env.EVOPAY_API_KEY),
-  PORT: Boolean(process.env.PORT),
-});
+console.log("[env-diagnostic]", { TEST_VARIABLE: process.env.TEST_VARIABLE, FRONTEND_URL: Boolean(process.env.FRONTEND_URL), BACKEND_PUBLIC_URL: Boolean(process.env.BACKEND_PUBLIC_URL), SUPABASE_URL: Boolean(process.env.SUPABASE_URL), SUPABASE_SERVICE_ROLE_KEY: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY), EVOPAY_API_KEY: Boolean(process.env.EVOPAY_API_KEY), PORT: Boolean(process.env.PORT), });
 
 const parsed = schema.safeParse(process.env);
 if (!parsed.success) {
