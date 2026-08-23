@@ -87,12 +87,16 @@ BEGIN
   SELECT * INTO v_state FROM public.payment_reconciliation_state WHERE payment_id = p_payment_id FOR UPDATE;
 
   IF v_state.attempts >= p_max_attempts
-     OR (v_state.last_attempt_at IS NOT NULL AND v_state.last_attempt_at > now() - p_min_interval)
+     OR v_state.next_attempt_at > now()
      OR (v_state.locked_at IS NOT NULL AND v_state.locked_at > now() - interval '15 minutes') THEN
     RETURN false;
   END IF;
   UPDATE public.payment_reconciliation_state
-  SET attempts = attempts + 1, last_attempt_at = now(), locked_at = now(), updated_at = now()
+  SET attempts = attempts + 1,
+      last_attempt_at = now(),
+      next_attempt_at = now() + p_min_interval,
+      locked_at = now(),
+      updated_at = now()
   WHERE payment_id = p_payment_id;
   RETURN true;
 END;
