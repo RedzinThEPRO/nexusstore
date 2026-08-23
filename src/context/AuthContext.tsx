@@ -12,6 +12,7 @@ interface AuthContextValue {
   refresh: () => void;
   updateMyProfile: (patch: Partial<Profile>) => void;
   isAdmin: boolean;
+  verifyMfa: (code: string) => Promise<AuthResult>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -62,6 +63,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { ok: true, requiresMfa: profile.role === 'SUPER_ADMIN' && aal?.currentLevel !== 'aal2' };
   };
 
+  const verifyMfa = async (code: string): Promise<AuthResult> => {
+    if (!supabase) return { ok: false, error: 'Autenticação não configurada.' };
+    const { data: factors, error: listError } = await supabase.auth.mfa.listFactors();
+    const factor = factors?.totp?.find((candidate) => candidate.status === 'verified');
+    if (listError || !factor) return { ok: false, error: 'MFA não configurado para esta conta.' };
+    const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId: factor.id });
+    if (challengeError || !challenge) return { ok: false, error: 'Não foi possível iniciar a verificação MFA.' };
+    const { error } = await supabase.auth.mfa.verify({ factorId: factor.id, challengeId: challenge.id, code: code.trim() });
+    if (error) return { ok: false, error: 'Código MFA inválido.' };
+    await refresh();
+    return { ok: true };
+  };
+
   const register = async ({ email, password, username }: { email: string; password: string; username: string }): Promise<AuthResult> => {
     if (!supabase) return { ok: false, error: 'Autenticação não configurada.' };
     const cleanUsername = username.trim();
@@ -80,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void supabase.from('profiles').update(safePatch).eq('id', user.id).select().single().then(({ data }) => { if (data) setUser(data as Profile); });
   };
 
-  return <AuthContext.Provider value={{ user, loading, login, register, logout, refresh, updateMyProfile, isAdmin: user?.role === 'SUPER_ADMIN' && mfaVerified }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, loading, login, register, logout, refresh, updateMyProfile, verifyMfa, isAdmin: user?.role === 'SUPER_ADMIN' && mfaVerified }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {
