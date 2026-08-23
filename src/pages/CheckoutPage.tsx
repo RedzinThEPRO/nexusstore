@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
@@ -30,6 +30,21 @@ export function CheckoutPage() {
   const [creatingPayment, setCreatingPayment] = useState(false);
   const [toast, setToast] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
+
+  useEffect(() => {
+    if (!supabase || step !== 'payment' || !orderId) return;
+    let active = true;
+    const check = async () => {
+      const { data } = await supabase.from('orders').select('payment_status').eq('id', orderId).maybeSingle();
+      if (active && data?.payment_status === 'PAID') {
+        clear();
+        setStep('success');
+      }
+    };
+    void check();
+    const timer = window.setInterval(check, 5000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [step, orderId, clear]);
 
   if (!user) {
     navigate('/login?redirect=/checkout');
