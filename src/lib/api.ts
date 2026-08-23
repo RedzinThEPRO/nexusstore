@@ -219,3 +219,22 @@ export function saveTerms(title: string, content: string): Terms {
   write(STORE_KEYS.terms, terms);
   return terms;
 }
+
+
+const backendUrl = (import.meta.env.VITE_BACKEND_URL as string | undefined)?.replace(/\/$/, '');
+export type BackendPayment = { orderId: string; paymentId: string; providerId: string | null; amount: number; pixCode: string | null; pixQr: string | null; status: string };
+async function backendRequest(path: string, init: RequestInit = {}) {
+  if (!supabase || !backendUrl) throw new Error('Backend de pagamentos não configurado.');
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('Sessão expirada. Faça login novamente.');
+  const response = await fetch(backendUrl + path, { ...init, headers: { 'Content-Type': 'application/json', ...(init.headers ?? {}), Authorization: 'Bearer ' + session.access_token } });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || 'Não foi possível comunicar com o backend de pagamentos.');
+  return body;
+}
+export function createPixPayment(orderId: string, customer: { name: string; document: string; email: string }): Promise<BackendPayment> {
+  return backendRequest('/api/payments/pix', { method: 'POST', body: JSON.stringify({ orderId, customer }) });
+}
+export function getPixPaymentStatus(providerId: string): Promise<{ id: string; status: string; amount: number }> {
+  return backendRequest('/api/payments/pix/' + encodeURIComponent(providerId));
+}
