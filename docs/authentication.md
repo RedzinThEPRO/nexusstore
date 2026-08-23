@@ -1,34 +1,21 @@
-# Autenticação
+# Autenticação e segurança
 
-## Supabase Auth (produção)
+## Regra de produção
 
-- Email/senha
-- Sessão persistida pelo Supabase
-- Trigger cria profile automaticamente no signup
+A aplicação não oferece mais autenticação demo no navegador. Sem Supabase configurado, login, cadastro e acesso administrativo permanecem bloqueados. Nunca use credenciais em localStorage, código-fonte ou variáveis VITE: tudo com prefixo VITE é público no bundle.
 
-## Modo Demo
+## Supabase Auth
 
-- Credenciais armazenadas localmente (apenas para demonstração)
-- Sessão via localStorage
-- Contas demo:
-  - Admin: `admin@nexus.gg` / `admin123`
-  - Cliente: `gamer@nexus.gg` / `gamer123`
+- Use Email/Password no Supabase Auth, com confirmação de e-mail ativada.
+- O perfil deve ser criado por trigger seguro e o papel SUPER_ADMIN atribuído somente por operação administrativa protegida.
+- O acesso ao dashboard é permitido apenas para usuários autenticados cujo perfil tenha role SUPER_ADMIN.
+- O e-mail de recuperação é um canal de recuperação, não uma identidade de login separada.
+- Para o administrador, habilite MFA TOTP no Supabase Auth e exija um fator verificado antes de liberar operações sensíveis.
 
-## RBAC
+## Conta administrativa
 
-- `USER` — Cliente padrão
-- `SUPER_ADMIN` — Acesso ao painel admin
+Não há e-mail, senha, segredo TOTP ou código de recuperação neste repositório. A conta precisa ser criada no Supabase Auth, confirmada por e-mail e vinculada ao perfil SUPER_ADMIN no banco. Gere o segredo TOTP dentro do fluxo de MFA do Supabase e armazene os códigos de recuperação fora do GitHub.
 
-## Fluxo
+## Limites
 
-1. Cadastro: email + senha + username (sem Free Fire ID)
-2. Login: email + senha
-3. Perfil: editável (nome, CPF, data de nascimento, Free Fire ID)
-4. Checkout: dados pessoais preenchidos se ainda não existirem
-5. Logout: limpa a sessão
-
-## Notas
-
-- O ID do Free Fire NÃO é pedido no cadastro ou login
-- É solicitado apenas no checkout de produtos Free Fire
-- Dados sensíveis (CPF, data de nascimento) são protegidos por RLS
+O frontend não é uma fronteira de confiança: preços, cupons, estoque, totais, permissões, pagamentos e status de pedidos devem ser recalculados em funções server-side protegidas por RLS.
