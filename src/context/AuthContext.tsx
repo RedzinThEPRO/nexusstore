@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode, useCall
 import type { Profile } from '@/types';
 import { supabase } from '@/lib/supabase';
 
-interface AuthResult { ok: boolean; error?: string; requiresMfa?: boolean }
+interface AuthResult { ok: boolean; error?: string; requiresMfa?: boolean; mfaSetup?: { factorId: string; qrCode: string; secret: string } }
 interface AuthContextValue {
   user: Profile | null;
   loading: boolean;
@@ -13,6 +13,7 @@ interface AuthContextValue {
   updateMyProfile: (patch: Partial<Profile>) => void;
   isAdmin: boolean;
   verifyMfa: (code: string) => Promise<AuthResult>;
+  setupMfa: () => Promise<AuthResult>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -76,6 +77,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { ok: true };
   };
 
+  const setupMfa = async (): Promise<AuthResult> => {
+    if (!supabase) return { ok: false, error: 'Autenticação não configurada.' };
+    const { data: factors } = await supabase.auth.mfa.listFactors();
+    if (factors?.totp?.some((factor) => factor.status === 'verified')) return { ok: true };
+    const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'NexusStore Admin' });
+    if (error || !data?.id || !data.totp) return { ok: false, error: 'Não foi possível iniciar a configuração MFA.' };
+    return { ok: true, mfaSetup: { factorId: data.id, qrCode: data.totp.qr_code, secret: data.totp.secret } };
+  };
+
   const register = async ({ email, password, username }: { email: string; password: string; username: string }): Promise<AuthResult> => {
     if (!supabase) return { ok: false, error: 'Autenticação não configurada.' };
     const cleanUsername = username.trim();
@@ -94,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void supabase.from('profiles').update(safePatch).eq('id', user.id).select().single().then(({ data }) => { if (data) setUser(data as Profile); });
   };
 
-  return <AuthContext.Provider value={{ user, loading, login, register, logout, refresh, updateMyProfile, verifyMfa, isAdmin: user?.role === 'SUPER_ADMIN' && mfaVerified }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, loading, login, register, logout, refresh, updateMyProfile, verifyMfa, setupMfa, isAdmin: user?.role === 'SUPER_ADMIN' && mfaVerified }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {
