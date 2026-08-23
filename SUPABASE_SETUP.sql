@@ -455,3 +455,24 @@ CREATE POLICY "banners_read" ON storage.objects FOR SELECT TO anon, authenticate
 -- ============================================================
 --  FIM
 -- ============================================================
+
+
+-- HARDENING MIGRATION (safe to rerun)
+ALTER TABLE products ADD COLUMN IF NOT EXISTS inventory_mode TEXT NOT NULL DEFAULT 'SINGLE' CHECK (inventory_mode IN ('SINGLE','MULTIPLE'));
+ALTER TABLE products ADD COLUMN IF NOT EXISTS variants JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+DROP POLICY IF EXISTS profiles_select_own ON profiles;
+DROP POLICY IF EXISTS profiles_update_own ON profiles;
+CREATE POLICY profiles_select_own ON profiles FOR SELECT TO authenticated USING (auth.uid() = id OR public.is_admin());
+CREATE POLICY profiles_update_own ON profiles FOR UPDATE TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+DROP POLICY IF EXISTS orders_update ON orders;
+DROP POLICY IF EXISTS coupons_read ON coupons;
+DROP POLICY IF EXISTS coupons_write ON coupons;
+CREATE POLICY coupons_admin_only ON coupons FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+DROP POLICY IF EXISTS audit_insert ON audit_logs;
+CREATE POLICY audit_insert_admin ON audit_logs FOR INSERT TO authenticated WITH CHECK (public.is_admin() AND actor_id = auth.uid());
+DROP POLICY IF EXISTS chat_insert ON chat_messages;
+CREATE POLICY chat_insert_scoped ON chat_messages FOR INSERT TO authenticated WITH CHECK (sender_id = auth.uid() AND (sender_role = 'admin') = public.is_admin());
+CREATE OR REPLACE FUNCTION public.is_admin() RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$ SELECT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'SUPER_ADMIN'); $$;
+REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
