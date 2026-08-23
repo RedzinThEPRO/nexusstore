@@ -84,7 +84,7 @@ export function CheckoutPage() {
     }));
 
     const order: Order = {
-      id: uid('ord'), user_id: user.id, items: orderItems,
+      id: supabase ? crypto.randomUUID() : uid('ord'), user_id: user.id, items: orderItems,
       subtotal, discount, total, coupon_code: appliedCoupon?.code,
       status: 'PENDING', payment_status: 'PENDING', delivery_status: 'PENDING',
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
