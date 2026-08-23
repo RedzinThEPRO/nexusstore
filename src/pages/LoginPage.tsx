@@ -5,7 +5,7 @@ import { Toast } from '@/components/ui';
 import { Gamepad2, Mail, Lock, ArrowRight } from 'lucide-react';
 
 export function LoginPage() {
-  const { login, verifyMfa } = useAuth();
+  const { login, verifyMfa, setupMfa } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const redirect = new URLSearchParams(location.search).get('redirect') ?? '/';
@@ -15,12 +15,15 @@ export function LoginPage() {
   const [toast, setToast] = useState('');
   const [mfaRequired, setMfaRequired] = useState(false);
   const [mfaCode, setMfaCode] = useState('');
+  const [mfaSetup, setMfaSetup] = useState<{ qrCode: string; secret: string } | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const res = await login(email, password);
     if (res.ok && res.requiresMfa) {
       setMfaRequired(true);
+      const setup = await setupMfa();
+      if (setup.mfaSetup) setMfaSetup({ qrCode: setup.mfaSetup.qrCode, secret: setup.mfaSetup.secret });
     } else if (res.ok) {
       setToast('Login realizado!');
       setTimeout(() => navigate(redirect), 500);
@@ -50,6 +53,11 @@ export function LoginPage() {
 
       <div className="card p-6">
         {mfaRequired ? <form onSubmit={submitMfa} className="space-y-4">
+          {mfaSetup && <div className="space-y-2 text-sm text-ink-200">
+            <p>Escaneie o QR Code no seu autenticador e confirme o código.</p>
+            <img src={mfaSetup.qrCode} alt="QR Code para configurar MFA" className="mx-auto h-44 w-44 rounded-lg bg-white p-2" />
+            <p className="break-all text-xs text-ink-400">Chave manual: {mfaSetup.secret}</p>
+          </div>}
           <div><label className="label">Código do autenticador</label>
             <input inputMode="numeric" autoComplete="one-time-code" value={mfaCode} onChange={e => setMfaCode(e.target.value)} className="input" minLength={6} maxLength={8} required />
           </div>
