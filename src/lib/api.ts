@@ -22,18 +22,7 @@ export function updateProfile(id: string, patch: Partial<Profile>): Profile | un
   return list[idx];
 }
 
-// ---- Credentials (demo only) ----
-interface Cred { id: string; email: string; password: string; }
-export function getCreds(): Cred[] { return read('nx_creds', []); }
-export function saveCreds(c: Cred[]): void { write('nx_creds', c); }
-export function verifyCred(email: string, password: string): Cred | undefined {
-  return getCreds().find(c => c.email.toLowerCase() === email.toLowerCase() && c.password === password);
-}
-export function addCred(id: string, email: string, password: string): void {
-  const creds = getCreds();
-  creds.push({ id, email, password });
-  saveCreds(creds);
-}
+// Authentication is owned by Supabase Auth. Never store credentials in browser storage.
 
 // ---- Session ----
 export function getSession(): string | null { return read<string | null>(STORE_KEYS.session, null); }
