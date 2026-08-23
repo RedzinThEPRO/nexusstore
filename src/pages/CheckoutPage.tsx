@@ -35,12 +35,13 @@ export function CheckoutPage() {
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   useEffect(() => {
-    if (!supabase || step !== 'payment' || !orderId || !providerId) return;
+    const client = supabase;
+    if (!client || step !== 'payment' || !orderId || !providerId) return;
     let active = true;
     const check = async () => {
       const [gatewayResult, orderResult] = await Promise.allSettled([
         getPixPaymentStatus(providerId),
-        supabase.from('orders').select('payment_status').eq('id', orderId).maybeSingle(),
+        client.from('orders').select('payment_status').eq('id', orderId).maybeSingle(),
       ]);
       if (!active) return;
       if (gatewayResult.status === 'fulfilled') setPaymentStatus(gatewayResult.value.status);
