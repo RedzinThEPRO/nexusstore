@@ -1,0 +1,12 @@
+/* Security headers for Netlify/Cloudflare Pages deployments */
+/*
+  Content-Security-Policy should be finalized against the deployed asset/API domains.
+  Do not copy this file as a substitute for server-side headers on other hosts.
+*/
+/* /
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+*/
