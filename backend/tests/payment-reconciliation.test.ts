@@ -1,0 +1,12 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { canReconcile, validateCompletedTransaction } from "../src/services/reconciliation.js";
+const payment = { provider_id: "tx-1", amount: 100 };
+const provider = { id: "tx-1", amount: 100, status: "COMPLETED", type: "DEPOSIT" as const };
+const old = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+test("pagamento válido", () => assert.deepEqual(validateCompletedTransaction(payment, provider), { ok: true }));
+test("pagamento já confirmado permanece idempotente", () => { const result = validateCompletedTransaction(payment, provider); assert.equal(result.ok, true); assert.equal(result.ok && provider.status, "COMPLETED"); });
+test("pagamento inexistente não é confirmado", () => assert.deepEqual(validateCompletedTransaction(null, provider), { ok: false, reason: "NOT_FOUND" }));
+test("valor divergente é rejeitado", () => assert.deepEqual(validateCompletedTransaction(payment, { ...provider, amount: 99.99 }), { ok: false, reason: "AMOUNT_MISMATCH" }));
+test("falha na confirmação não passa como COMPLETED", () => assert.deepEqual(validateCompletedTransaction(payment, { ...provider, status: "PENDING" }), { ok: false, reason: "STATUS_NOT_COMPLETED" }));
+test("processamento duplicado é bloqueado pelo intervalo e limite", () => { assert.equal(canReconcile(old, [new Date(Date.now() - 60 * 1000).toISOString()]), false); assert.equal(canReconcile(old, [old, old, old], Date.now()), false); });
