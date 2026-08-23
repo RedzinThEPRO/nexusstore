@@ -25,6 +25,14 @@ export interface Category {
   created_at: string;
 }
 
+export interface ProductVariant {
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
+  sku?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -37,6 +45,8 @@ export interface Product {
   game: string;
   stock: number;
   sku: string;
+  inventory_mode?: 'SINGLE' | 'MULTIPLE';
+  variants?: ProductVariant[];
   status: 'ACTIVE' | 'INACTIVE';
   type: 'DIGITAL' | 'PHYSICAL' | 'SERVICE';
   requires_free_fire_id: boolean;
