@@ -3,7 +3,7 @@ import { getProducts, getCategories, createProduct, updateProduct, deleteProduct
 import { useAuth } from '@/context/AuthContext';
 import { Modal, ConfirmDialog, Toast, EmptyState } from '@/components/ui';
 import { formatBRL } from '@/lib/format';
-import type { Product } from '@/types';
+import type { Product, ProductVariant } from '@/types';
 import { Package, Plus, Pencil, Trash2, Power, X } from 'lucide-react';
 
 const GAMES = ['Free Fire', 'League of Legends', 'Valorant', 'CS2', 'Fortnite', 'Roblox', 'Minecraft', 'Outro'];
@@ -112,6 +112,8 @@ function ProductForm({ product, categories, onClose, onSave }: {
     status: product?.status ?? 'ACTIVE' as const,
     type: product?.type ?? 'DIGITAL' as const,
     images: product?.images ?? [] as string[],
+    inventory_mode: product?.inventory_mode ?? 'SINGLE' as const,
+    variants: product?.variants ?? [] as ProductVariant[],
   });
   const [imageInput, setImageInput] = useState('');
   const [error, setError] = useState('');
@@ -121,6 +123,8 @@ function ProductForm({ product, categories, onClose, onSave }: {
     if (form.price <= 0) { setError('Preço inválido.'); return; }
     if (!form.category_id && categories.length > 0) { setError('Selecione uma categoria.'); return; }
     if (!form.category_id) { setError('Crie uma categoria primeiro.'); return; }
+    if (form.inventory_mode === 'MULTIPLE' && form.variants.length === 0) { setError('Adicione ao menos um item.'); return; }
+    if (form.inventory_mode === 'MULTIPLE' && form.variants.some(v => !v.name.trim() || v.price <= 0 || v.stock < 0)) { setError('Preencha nome, valor e estoque de todos os itens.'); return; }
 
     const requiresFF = form.game === 'Free Fire' || categories.find(c => c.id === form.category_id)?.name.toLowerCase().includes('free fire') || false;
 
@@ -129,6 +133,8 @@ function ProductForm({ product, categories, onClose, onSave }: {
         ...form,
         promo_price: form.promo_price > 0 ? form.promo_price : undefined,
         requires_free_fire_id: requiresFF,
+        stock: form.inventory_mode === 'MULTIPLE' ? form.variants.reduce((sum, v) => sum + v.stock, 0) : Math.max(0, form.stock),
+        variants: form.inventory_mode === 'MULTIPLE' ? form.variants : [],
       });
       addAuditLog({ actor_id: user!.id, actor_role: 'SUPER_ADMIN', action: 'product_update', target: product.id });
     } else {
@@ -187,6 +193,22 @@ function ProductForm({ product, categories, onClose, onSave }: {
             </select>
           </div>
         </div>
+        <div className="card border-neon-500/20 p-4 space-y-3">
+          <div><label className="label">Inventário</label>
+            <select value={form.inventory_mode} onChange={e => setForm(f => ({ ...f, inventory_mode: e.target.value as 'SINGLE' | 'MULTIPLE', variants: e.target.value === 'SINGLE' ? [] : f.variants }))} className="input">
+              <option value="SINGLE">Único — um item neste produto</option><option value="MULTIPLE">Múltiplo — vários itens selecionáveis</option>
+            </select></div>
+          {form.inventory_mode === 'MULTIPLE' && <div className="space-y-2">
+            {form.variants.map((variant, index) => <div key={variant.id} className="grid grid-cols-[1fr_110px_100px_32px] gap-2 items-end">
+              <div><label className="label">Nome do item</label><input value={variant.name} onChange={e => setForm(f => ({ ...f, variants: f.variants.map((v,i) => i===index ? {...v,name:e.target.value} : v) }))} className="input" placeholder="Ex.: Conta nível 50" /></div>
+              <div><label className="label">Valor</label><input type="number" min="0.01" step="0.01" value={variant.price} onChange={e => setForm(f => ({ ...f, variants: f.variants.map((v,i) => i===index ? {...v,price:+e.target.value} : v) }))} className="input" /></div>
+              <div><label className="label">Estoque</label><input type="number" min="0" value={variant.stock} onChange={e => setForm(f => ({ ...f, variants: f.variants.map((v,i) => i===index ? {...v,stock:Math.max(0,+e.target.value)} : v) }))} className="input" /></div>
+              <button type="button" onClick={() => setForm(f => ({ ...f, variants: f.variants.filter((_,i) => i!==index) }))} className="grid h-10 w-8 place-items-center rounded-lg text-danger-400 hover:bg-white/5"><X className="h-4 w-4" /></button>
+            </div>)}
+            <button type="button" onClick={() => setForm(f => ({ ...f, variants: [...f.variants, { id: 'variant-' + Date.now(), name: '', price: f.price, stock: 1 }] }))} className="btn-outline text-sm"><Plus className="h-4 w-4" /> Adicionar item</button>
+          </div>}
+        </div>
+
         <div className="grid grid-cols-3 gap-3">
           <div>
             <label className="label">Estoque</label>
