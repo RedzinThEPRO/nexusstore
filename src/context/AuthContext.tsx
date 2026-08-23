@@ -5,6 +5,7 @@ import {
   getSession, setSession, updateProfile, addAuditLog,
 } from '@/lib/api';
 import { uid } from '@/lib/store';
+import { isSupabaseConfigured } from '@/lib/supabase';
 
 interface AuthContextValue {
   user: Profile | null;
@@ -24,6 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(() => {
+    if (!isSupabaseConfigured) { setSession(null); setUser(null); return; }
     const sid = getSession();
     if (!sid) { setUser(null); return; }
     const p = getProfileById(sid);
@@ -36,6 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const login: AuthContextValue['login'] = (email, password) => {
+    if (!isSupabaseConfigured) return { ok: false, error: 'Autenticação indisponível: configure o Supabase antes de entrar.' };
     const cred = verifyCred(email, password);
     if (!cred) return { ok: false, error: 'E-mail ou senha incorretos.' };
     const profile = getProfileById(cred.id);
@@ -47,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const register: AuthContextValue['register'] = ({ email, password, username }) => {
+    if (!isSupabaseConfigured) return { ok: false, error: 'Cadastro indisponível: configure o Supabase antes de criar uma conta.' };
     const existing = getProfiles().find(p => p.email.toLowerCase() === email.toLowerCase());
     if (existing) return { ok: false, error: 'Já existe uma conta com este e-mail.' };
     const now = new Date().toISOString();
