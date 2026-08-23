@@ -336,6 +336,38 @@ CREATE TRIGGER on_auth_user_created
 --  RLS — Row Level Security
 -- ============================================================
 
+-- Make the complete script rerunnable before creating policies.
+DROP POLICY IF EXISTS profiles_select_own ON profiles;
+DROP POLICY IF EXISTS profiles_update_own ON profiles;
+DROP POLICY IF EXISTS categories_read ON categories;
+DROP POLICY IF EXISTS categories_write ON categories;
+DROP POLICY IF EXISTS products_read ON products;
+DROP POLICY IF EXISTS products_write ON products;
+DROP POLICY IF EXISTS orders_select ON orders;
+DROP POLICY IF EXISTS orders_insert ON orders;
+DROP POLICY IF EXISTS order_items_select ON order_items;
+DROP POLICY IF EXISTS deliveries_select ON deliveries;
+DROP POLICY IF EXISTS deliveries_update ON deliveries;
+DROP POLICY IF EXISTS chat_select ON chat_messages;
+DROP POLICY IF EXISTS chat_insert ON chat_messages;
+DROP POLICY IF EXISTS notif_select ON notifications;
+DROP POLICY IF EXISTS notif_update ON notifications;
+DROP POLICY IF EXISTS reviews_read ON reviews;
+DROP POLICY IF EXISTS reviews_insert ON reviews;
+DROP POLICY IF EXISTS reviews_delete ON reviews;
+DROP POLICY IF EXISTS coupons_read ON coupons;
+DROP POLICY IF EXISTS coupons_write ON coupons;
+DROP POLICY IF EXISTS audit_read ON audit_logs;
+DROP POLICY IF EXISTS audit_insert ON audit_logs;
+DROP POLICY IF EXISTS product_images_read ON storage.objects;
+DROP POLICY IF EXISTS product_images_write ON storage.objects;
+DROP POLICY IF EXISTS store_assets_read ON storage.objects;
+DROP POLICY IF EXISTS banners_read ON storage.objects;
+
+CREATE OR REPLACE FUNCTION public.is_admin() RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $ SELECT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'SUPER_ADMIN'); $;
+REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
+
 -- Profiles
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "profiles_select_own" ON profiles FOR SELECT TO authenticated USING (auth.uid() = id OR role = 'SUPER_ADMIN');
