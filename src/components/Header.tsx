@@ -152,7 +152,6 @@ export function Header() {
                     <div className="px-4 py-3 border-b border-white/10">
                       <p className="text-sm font-semibold text-white truncate">{user.username}</p>
                       <p className="text-xs text-ink-300 truncate">{user.email}</p>
-                      {isAdmin && <span className="chip-neon mt-1.5"><Shield className="h-3 w-3" /> Admin</span>}
                     </div>
                     <div className="py-1">
                       <Link to="/perfil" onClick={() => setProfileOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-ink-200 hover:bg-white/5 hover:text-white">
