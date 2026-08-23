@@ -12,7 +12,8 @@ router.post("/webhooks/evopay", async (req, res) => {
   const event = parsed.data; const key = eventKey(event);
   const { data: payment, error: paymentError } = await db.from("payments").select("id,order_id,provider_id,amount,status").eq("provider_id", event.id).maybeSingle();
   if (paymentError) { console.error("EvoPay webhook payment lookup failed", { transactionId: event.id, status: event.status }); return res.status(202).json({ received: true, processed: false }); }
-  let eventType = event.status; if (payment && cents(payment.amount) !== cents(event.amount)) eventType = "AMOUNT_MISMATCH";
+  let eventType: typeof event.status | "AMOUNT_MISMATCH" = event.status;
+  if (payment && cents(payment.amount) !== cents(event.amount)) eventType = "AMOUNT_MISMATCH";
   const { error: eventError } = await db.from("payment_events").insert({ payment_id: payment?.id ?? null, event_type: eventType, provider_event_id: key, payload: event });
   if (eventError?.code === "23505") return res.status(200).json({ received: true, duplicate: true });
   if (eventError) { console.error("EvoPay webhook event persistence failed", { transactionId: event.id, status: event.status }); return res.status(202).json({ received: true, processed: false }); }
