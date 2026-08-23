@@ -5,7 +5,7 @@ import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
 import { formatBRL } from '@/lib/format';
 import { Stars, Badge, EmptyState, Toast } from '@/components/ui';
-import { ShoppingCart, Package, Tag, Shield, Zap, Minus, Plus, ChevronLeft, MessageCircle } from 'lucide-react';
+import { ShoppingCart, Package, Tag, Shield, Zap, Minus, Plus, ChevronLeft, MessageCircle, ListPlus } from 'lucide-react';
 import { uid } from '@/lib/store';
 
 export function ProductPage() {
@@ -16,6 +16,7 @@ export function ProductPage() {
   const product = getProductBySlug(slug ?? '');
   const categories = getCategories();
   const [qty, setQty] = useState(1);
+  const [selectedVariantId, setSelectedVariantId] = useState(product?.variants?.[0]?.id ?? '');
   const [ffid, setFfid] = useState('');
   const [toast, setToast] = useState('');
   const [showReview, setShowReview] = useState(false);
@@ -30,7 +31,10 @@ export function ProductPage() {
   const reviews = getReviewsByProduct(product.id);
   const avg = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0;
   const category = categories.find(c => c.id === product.category_id);
-  const price = product.promo_price ?? product.price;
+  const selectedVariant = product.variants?.find(v => v.id === selectedVariantId);
+  const displayPrice = selectedVariant?.price ?? (product.promo_price ?? product.price);
+  const displayStock = selectedVariant?.stock ?? product.stock;
+  const price = displayPrice;
   const hasPromo = product.promo_price != null && product.promo_price < product.price;
   const needsFF = product.requires_free_fire_id;
 
@@ -39,7 +43,8 @@ export function ProductPage() {
       setToast('Informe seu ID do Free Fire para continuar.');
       return;
     }
-    add(product, qty, needsFF ? ffid.trim() : undefined);
+    const cartProduct = selectedVariant ? { ...product, name: product.name + ' — ' + selectedVariant.name, price: selectedVariant.price, promo_price: undefined, stock: selectedVariant.stock, sku: selectedVariant.sku ?? product.sku } : product;
+    add(cartProduct, qty, needsFF ? ffid.trim() : undefined);
     navigate('/carrinho');
   };
 
@@ -109,7 +114,7 @@ export function ProductPage() {
             <p className="text-xs text-ink-400">SKU: {product.sku}</p>
             <div className="mt-3 flex items-center gap-2">
               {product.stock > 0 ? (
-                <Badge variant="success">Em estoque: {product.stock}</Badge>
+                <Badge variant="success">Em estoque: {displayStock}</Badge>
               ) : (
                 <Badge variant="danger">Esgotado</Badge>
               )}
@@ -134,11 +139,11 @@ export function ProductPage() {
                 <Minus className="h-4 w-4" />
               </button>
               <span className="w-10 text-center text-white font-semibold">{qty}</span>
-              <button onClick={() => setQty(q => Math.min(product.stock, q + 1))} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-white/5 text-ink-200">
+              <button onClick={() => setQty(q => Math.min(displayStock, q + 1))} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-white/5 text-ink-200">
                 <Plus className="h-4 w-4" />
               </button>
             </div>
-            <button onClick={handleAdd} disabled={product.stock <= 0}
+            <button onClick={handleAdd} disabled={displayStock <= 0 || (product.inventory_mode === 'MULTIPLE' && !selectedVariant)}
               className="btn-primary flex-1 py-3 text-base">
               <ShoppingCart className="h-5 w-5" /> Adicionar ao Carrinho
             </button>
