@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode, useCallback } from 'react';
 import type { Profile } from '@/types';
-import { getSession, setSession, updateProfile, addAuditLog } from '@/lib/api';
+import { getSession, setSession, updateProfile, addAuditLog, getProfileById } from '@/lib/api';
 import { isSupabaseConfigured } from '@/lib/supabase';
 
 interface AuthContextValue {
