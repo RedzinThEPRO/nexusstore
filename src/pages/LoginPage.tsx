@@ -5,7 +5,7 @@ import { Toast } from '@/components/ui';
 import { Gamepad2, Mail, Lock, ArrowRight } from 'lucide-react';
 
 export function LoginPage() {
-  const { login } = useAuth();
+  const { login, verifyMfa } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const redirect = new URLSearchParams(location.search).get('redirect') ?? '/';
@@ -13,16 +13,27 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = login(email, password);
-    if (res.ok) {
+    const res = await login(email, password);
+    if (res.ok && res.requiresMfa) {
+      setMfaRequired(true);
+    } else if (res.ok) {
       setToast('Login realizado!');
       setTimeout(() => navigate(redirect), 500);
     } else {
       setError(res.error ?? 'Erro ao entrar.');
     }
+  };
+
+  const submitMfa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = await verifyMfa(mfaCode);
+    if (res.ok) navigate(redirect);
+    else setError(res.error ?? 'Código MFA inválido.');
   };
 
   return (
@@ -38,7 +49,13 @@ export function LoginPage() {
       </div>
 
       <div className="card p-6">
-        <form onSubmit={submit} className="space-y-4">
+        {mfaRequired ? <form onSubmit={submitMfa} className="space-y-4">
+          <div><label className="label">Código do autenticador</label>
+            <input inputMode="numeric" autoComplete="one-time-code" value={mfaCode} onChange={e => setMfaCode(e.target.value)} className="input" minLength={6} maxLength={8} required />
+          </div>
+          {error && <p className="text-sm text-danger-400">{error}</p>}
+          <button type="submit" className="btn-primary w-full py-3">Verificar MFA <ArrowRight className="h-4 w-4" /></button>
+        </form> : <form onSubmit={submit} className="space-y-4">
           <div>
             <label className="label">E-mail</label>
             <div className="relative">
@@ -59,7 +76,7 @@ export function LoginPage() {
           <button type="submit" className="btn-primary w-full py-3">
             Entrar <ArrowRight className="h-4 w-4" />
           </button>
-        </form>
+        </form>}
       </div>
 
       <p className="text-center text-sm text-ink-300 mt-6">
