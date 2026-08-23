@@ -13,11 +13,11 @@ export function RegisterPage() {
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (username.trim().length < 3) { setError('Nome de usuário muito curto.'); return; }
-    if (password.length < 6) { setError('Senha deve ter ao menos 6 caracteres.'); return; }
-    const res = register({ email, password, username });
+    if (password.length < 12) { setError('Senha deve ter ao menos 12 caracteres.'); return; }
+    const res = await register({ email, password, username });
     if (res.ok) { setToast('Conta criada!'); setTimeout(() => navigate('/'), 500); }
     else setError(res.error ?? 'Erro ao criar conta.');
   };
