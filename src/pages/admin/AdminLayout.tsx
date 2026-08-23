@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { useEffect, useState } from 'react';
 import {
   LayoutDashboard, Package, Tag, ShoppingCart, Truck, Users,
@@ -68,7 +69,7 @@ export function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    if (!user || !isAdmin) navigate('/');
+    if (!isSupabaseConfigured || !user || !isAdmin) navigate('/');
   }, [user, isAdmin, navigate]);
 
   // Close sidebar on route change (mobile)
@@ -76,7 +77,7 @@ export function AdminLayout() {
     setSidebarOpen(false);
   }, [location.pathname]);
 
-  if (!user || !isAdmin) return null;
+  if (!isSupabaseConfigured || !user || !isAdmin) return null;
 
   const currentTitle = menuGroups
     .flatMap(g => g.items)
