@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { env } from "../config/env.js";
 import { requireAdmin, type AuthenticatedRequest } from "../middleware/auth.js";
 import { EvoPayService } from "../services/evopay.js";
-import { canReconcile, validateCompletedTransaction, RECONCILIATION_MAX_ATTEMPTS, RECONCILIATION_MIN_INTERVAL_MS } from "../services/reconciliation.js";
+import { validateCompletedTransaction, RECONCILIATION_MAX_ATTEMPTS, RECONCILIATION_MIN_INTERVAL_MS } from "../services/reconciliation.js";
 const router = Router();
 const db = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { autoRefreshToken: false, persistSession: false } });
 const evoPay = new EvoPayService(env.EVOPAY_API_KEY);
