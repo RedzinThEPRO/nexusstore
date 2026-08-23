@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
-import { getCouponByCode } from '@/lib/api';
+import { getCouponByCode, createPixPayment, getPixPaymentStatus } from '@/lib/api';
 import { uid } from '@/lib/store';
 import { formatBRL, validateCPF, getAge, formatCPFInput } from '@/lib/format';
 import type { OrderItem } from '@/types';
@@ -27,16 +27,24 @@ export function CheckoutPage() {
   const [pixCopied, setPixCopied] = useState(false);
   const [pixCode, setPixCode] = useState('');
   const [pixQr, setPixQr] = useState('');
+  const [providerId, setProviderId] = useState('');
+  const [paymentAmount, setPaymentAmount] = useState<number | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState('PENDING');
   const [creatingPayment, setCreatingPayment] = useState(false);
   const [toast, setToast] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   useEffect(() => {
-    if (!supabase || step !== 'payment' || !orderId) return;
+    if (!supabase || step !== 'payment' || !orderId || !providerId) return;
     let active = true;
     const check = async () => {
-      const { data } = await supabase.from('orders').select('payment_status').eq('id', orderId).maybeSingle();
-      if (active && data?.payment_status === 'PAID') {
+      const [gatewayResult, orderResult] = await Promise.allSettled([
+        getPixPaymentStatus(providerId),
+        supabase.from('orders').select('payment_status').eq('id', orderId).maybeSingle(),
+      ]);
+      if (!active) return;
+      if (gatewayResult.status === 'fulfilled') setPaymentStatus(gatewayResult.value.status);
+      if (orderResult.status === 'fulfilled' && orderResult.value.data?.payment_status === 'PAID') {
         clear();
         setStep('success');
       }
@@ -44,7 +52,7 @@ export function CheckoutPage() {
     void check();
     const timer = window.setInterval(check, 5000);
     return () => { active = false; window.clearInterval(timer); };
-  }, [step, orderId, clear]);
+  }, [step, orderId, providerId, clear]);
 
   if (!user) {
     navigate('/login?redirect=/checkout');
@@ -98,18 +106,38 @@ export function CheckoutPage() {
       quantity: i.quantity, free_fire_id: i.free_fire_id,
     }));
 
-    if (supabase) {
-      setCreatingPayment(true);
-      const { data, error } = await supabase.functions.invoke('evopay-create-charge', { body: { couponCode: appliedCoupon?.code, items: orderItems.map(i => ({ product_id: i.product_id, quantity: i.quantity, free_fire_id: i.free_fire_id })), customer: { name: `${firstName} ${lastName}`, document: cpf, email: user.email } } });
-      setCreatingPayment(false);
-      if (error || data?.error) { setToast(data?.error || error?.message || 'Não foi possível gerar o PIX.'); return; }
-      setOrderId(data.orderId);
-      setPixCode(data?.pixCode || data?.qrCodeText || ''); setPixQr(data?.pixQr || data?.qrCodeBase64 || data?.qrCodeUrl || '');
-    } else {
+    if (!supabase) {
       setToast('Pagamento indisponível: configure o Supabase para processar pedidos.');
       return;
     }
-    setStep('payment');
+
+    setCreatingPayment(true);
+    try {
+      // The secure RPC creates the order using server-side prices, discounts and stock.
+      const { data: createdOrder, error: orderError } = await supabase.rpc('create_order_secure', {
+        p_items: orderItems.map(i => ({ product_id: i.product_id, quantity: i.quantity, free_fire_id: i.free_fire_id })),
+        p_coupon_code: appliedCoupon?.code ?? null,
+      });
+      if (orderError || !createdOrder?.order_id) {
+        setToast(orderError?.message || 'Não foi possível criar o pedido.');
+        return;
+      }
+      // Only the backend talks to EvoPay; the browser sends the order id and user JWT.
+      const payment = await createPixPayment(createdOrder.order_id, {
+        name: firstName + ' ' + lastName, document: cpf, email: user.email,
+      });
+      setOrderId(payment.orderId);
+      setProviderId(payment.providerId ?? '');
+      setPaymentAmount(payment.amount);
+      setPaymentStatus(payment.status);
+      setPixCode(payment.pixCode ?? '');
+      setPixQr(payment.pixQr ?? '');
+      setStep('payment');
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Não foi possível gerar o PIX.');
+    } finally {
+      setCreatingPayment(false);
+    }
   };
 
   const copyPix = () => {
@@ -144,13 +172,13 @@ export function CheckoutPage() {
         <h1 className="font-display text-3xl font-bold text-white mb-6">Pagamento via PIX</h1>
         <div className="card p-6 text-center">
           <div className="grid h-48 w-48 mx-auto place-items-center rounded-2xl bg-white p-4 mb-4">
-            <QrCode className="h-40 w-40 text-ink-950" />
+            {pixQr ? <img src={pixQr.startsWith('data:') || pixQr.startsWith('http') ? pixQr : `data:image/png;base64,${pixQr}`} alt="QR Code PIX" className="h-40 w-40 object-contain" /> : <QrCode className="h-40 w-40 text-ink-950" />}
           </div>
-          <p className="text-3xl font-bold text-neon-300 mb-1">{formatBRL(total)}</p>
+          <p className="text-3xl font-bold text-neon-300 mb-1">{paymentAmount !== null ? formatBRL(paymentAmount) : '—'}</p>
           <p className="text-sm text-ink-300 mb-4">Pedido #{orderId.slice(-8).toUpperCase()}</p>
 
           <div className="flex items-center gap-2 card p-3 mb-4 text-left">
-            <code className="flex-1 text-xs text-ink-200 truncate">00020126360014BR.GOV.BCB.PIX0114nexus@store.com...</code>
+            <code className="flex-1 text-xs text-ink-200 truncate">{pixCode || 'Código PIX indisponível'}</code>
             <button onClick={copyPix} className="btn-outline py-1.5 px-3 text-xs">
               {pixCopied ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
               {pixCopied ? 'Copiado!' : 'Copiar'}
@@ -158,7 +186,7 @@ export function CheckoutPage() {
           </div>
 
           <div className="flex items-center justify-center gap-2 mb-4">
-            <span className="chip-warning">Aguardando pagamento</span>
+            <span className={paymentStatus === 'PAID' ? 'chip-success' : 'chip-warning'}>{paymentStatus === 'PAID' ? 'Pagamento confirmado' : 'Aguardando pagamento'}</span>
           </div>
           <p className="text-xs text-ink-400 mt-3">
             Em produção, o pagamento é confirmado automaticamente pelo webhook do gateway PIX.
@@ -255,7 +283,7 @@ export function CheckoutPage() {
             {discount > 0 && <div className="flex justify-between text-success-400"><span>Desconto</span><span>-{formatBRL(discount)}</span></div>}
             <div className="flex justify-between text-white font-bold border-t border-white/10 pt-2"><span>Total</span><span>{formatBRL(total)}</span></div>
           </div>
-          <button onClick={placeOrder} className="btn-primary w-full mt-5 py-3">
+          <button onClick={placeOrder} disabled={creatingPayment} className="btn-primary w-full mt-5 py-3 disabled:opacity-60 disabled:cursor-not-allowed">
             Pagar via PIX <ArrowRight className="h-4 w-4" />
           </button>
           <div className="mt-4 flex items-center justify-center gap-3 text-xs text-ink-400">
