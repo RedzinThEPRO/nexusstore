@@ -8,6 +8,7 @@ import { formatBRL, validateCPF, getAge, formatCPFInput } from '@/lib/format';
 import type { Order, OrderItem, Delivery, Notification } from '@/types';
 import { EmptyState, Toast } from '@/components/ui';
 import { ShoppingCart, Shield, Zap, CheckCircle2, Copy, QrCode, ArrowRight, Package } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 export function CheckoutPage() {
   const { items, subtotal, clear } = useCart();
@@ -24,6 +25,9 @@ export function CheckoutPage() {
   const [step, setStep] = useState<'form' | 'payment' | 'success'>('form');
   const [orderId, setOrderId] = useState('');
   const [pixCopied, setPixCopied] = useState(false);
+  const [pixCode, setPixCode] = useState('');
+  const [pixQr, setPixQr] = useState('');
+  const [creatingPayment, setCreatingPayment] = useState(false);
   const [toast, setToast] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
 
@@ -65,7 +69,7 @@ export function CheckoutPage() {
     return null;
   };
 
-  const placeOrder = () => {
+  const placeOrder = async () => {
     const err = validateForm();
     if (err) { setToast(err); return; }
 
@@ -87,6 +91,13 @@ export function CheckoutPage() {
     };
     createOrder(order);
     setOrderId(order.id);
+    if (supabase) {
+      setCreatingPayment(true);
+      const { data, error } = await supabase.functions.invoke('evopay-create-charge', { body: { orderId: order.id, amount: total, customer: { name: `${firstName} ${lastName}`, document: cpf, email: user.email }, items: orderItems } });
+      setCreatingPayment(false);
+      if (error || data?.error) { setToast(data?.error || error?.message || 'Não foi possível gerar o PIX.'); return; }
+      setPixCode(data?.pixCode || data?.copyPaste || data?.qrCode || ''); setPixQr(data?.pixQr || data?.qrCodeImage || '');
+    }
     setStep('payment');
   };
 
@@ -122,7 +133,7 @@ export function CheckoutPage() {
   };
 
   const copyPix = () => {
-    navigator.clipboard.writeText(`00020126360014BR.GOV.BCB.PIX0114nexus@store.com5204000053039865802BR5913NEXUSSTORE6009SAOPAULO62070503***6304${orderId.slice(-6)}`);
+    navigator.clipboard.writeText(pixCode || `00020126360014BR.GOV.BCB.PIX0114nexus@store.com5204000053039865802BR5913NEXUSSTORE6009SAOPAULO62070503***6304${orderId.slice(-6)}`);
     setPixCopied(true);
     setTimeout(() => setPixCopied(false), 2000);
   };
@@ -170,7 +181,7 @@ export function CheckoutPage() {
             <span className="chip-warning">Aguardando pagamento</span>
           </div>
 
-          <button onClick={simulatePayment} className="btn-primary w-full py-3 text-base">
+          <button onClick={simulatePayment} disabled={creatingPayment} className="btn-primary w-full py-3 text-base disabled:opacity-50">
             <CheckCircle2 className="h-5 w-5" /> Simular Pagamento (Demo)
           </button>
           <p className="text-xs text-ink-400 mt-3">
