@@ -4,14 +4,9 @@ import { env, allowedOrigins } from "./config/env.js";
 import { healthRouter } from "./routes/health.js";
 import { paymentsRouter } from "./routes/payments.js";
 import { webhooksRouter } from "./routes/webhooks.js";
-
-const app = express();
-app.disable("x-powered-by");
+import { reconciliationRouter } from "./routes/reconciliation.js";
+const app = express(); app.disable("x-powered-by");
 app.use(cors({ origin: (origin, callback) => { if (!origin || allowedOrigins.includes(origin)) return callback(null, true); return callback(new Error("CORS origin not allowed")); }, methods: ["GET", "POST"], allowedHeaders: ["Authorization", "Content-Type"] }));
-app.use(express.json({ limit: "32kb" }));
-app.use(healthRouter);
-app.use("/api/payments", paymentsRouter);
-app.use(webhooksRouter);
-app.use((_req, res) => res.status(404).json({ error: "Not found" }));
+app.use(express.json({ limit: "32kb" })); app.use(healthRouter); app.use("/api/payments", paymentsRouter); app.use(webhooksRouter); app.use(reconciliationRouter); app.use((_req, res) => res.status(404).json({ error: "Not found" }));
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => { console.error(error); if (res.headersSent) return; res.status(500).json({ error: "Internal server error" }); });
 app.listen(env.PORT, "0.0.0.0", () => console.log("NexusStore backend listening on port " + env.PORT));
