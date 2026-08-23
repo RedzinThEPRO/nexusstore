@@ -3,7 +3,7 @@ import { z } from "zod";
 
 const schema = z.object({
   PORT: z.coerce.number().int().positive().default(10000),
-  FRONTEND_URL: z.string().url(),
+  FRONTEND_URL: z.string().min(1),
   BACKEND_PUBLIC_URL: z.string().url(),
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
