@@ -1,1 +1,88 @@
-const cors={"Access-Control-Allow-Origin":Deno.env.get("APP_ORIGIN")||"*","Access-Control-Allow-Headers":"authorization,content-type","Content-Type":"application/json"};const out=(b,s=200)=>new Response(JSON.stringify(b),{status:s,headers:cors});Deno.serve(async r=>{if(r.method==='OPTIONS')return new Response('ok',{headers:cors});if(r.method!=='POST')return out({error:'Method not allowed'},405);const a=r.headers.get('Authorization'),u=Deno.env.get('SUPABASE_URL'),k=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),ek=Deno.env.get('EVOPAY_API_KEY');if(!a||!u||!k||!ek)return out({error:'Server integration not configured'},503);const ur=await fetch(u+'/auth/v1/user',{headers:{Authorization:a,apikey:k}});if(!ur.ok)return out({error:'Unauthorized'},401);const user=await ur.json(),b=await r.json(),amount=Number(b.amount);if(!b.orderId||!Number.isFinite(amount)||amount<=0)return out({error:'orderId and positive amount are required'},400);const orderInsert=await fetch(u+'/rest/v1/orders',{method:'POST',headers:{Authorization:'Bearer '+k,apikey:k,'Content-Type':'application/json',Prefer:'resolution=ignore-duplicates'},body:JSON.stringify({id:b.orderId,user_id:user.id,subtotal:amount,discount:0,total:amount,status:'PENDING',payment_status:'PENDING',delivery_status:'PENDING'})});if(!orderInsert.ok)return out({error:'Could not persist order'},502);const path=Deno.env.get('EVOPAY_CREATE_CHARGE_PATH')||'/pix',payload={amount:Number(amount.toFixed(2)),externalReference:b.orderId,payerName:b.customer?.name,payerDocument:b.customer?.document,payerEmail:b.customer?.email,callbackUrl:Deno.env.get('EVOPAY_WEBHOOK_URL')};const er=await fetch('https://pix.evopay.cash/v1'+path,{method:'POST',headers:{'API-Key':ek,'Content-Type':'application/json'},body:JSON.stringify(payload)}),e=await er.json().catch(()=>({}));if(!er.ok)return out({error:e.message||e.error||'EvoPay rejected the charge'},er.status);const pixCode=e.qrCodeText||e.data?.qrCodeText||'',pixQr=e.qrCodeBase64||e.qrCodeUrl||e.data?.qrCodeBase64||e.data?.qrCodeUrl||'',providerId=e.id||e.data?.id||null;await fetch(u+'/rest/v1/payments',{method:'POST',headers:{Authorization:'Bearer '+k,apikey:k,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates'},body:JSON.stringify({order_id:b.orderId,amount,status:'PENDING',provider:'evopay',provider_id:providerId,external_id:b.orderId,pix_code:pixCode,pix_qr:pixQr,provider_status:e.status||'PENDING',raw_response:e})});return out({orderId:b.orderId,pixCode,pixQr,providerId});});
+const origin = Deno.env.get('APP_ORIGIN') ?? '';
+const headers = {
+  'Access-Control-Allow-Origin': origin,
+  'Access-Control-Allow-Headers': 'authorization,content-type',
+  'Content-Type': 'application/json',
+};
+const response = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers });
+
+Deno.serve(async (request) => {
+  if (request.method === 'OPTIONS') return new Response('ok', { headers });
+  if (request.method !== 'POST') return response({ error: 'Method not allowed' }, 405);
+
+  const authorization = request.headers.get('Authorization');
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const evoPayKey = Deno.env.get('EVOPAY_API_KEY');
+  if (!authorization || !supabaseUrl || !serviceKey || !evoPayKey) {
+    return response({ error: 'Server integration not configured' }, 503);
+  }
+
+  let body: { items?: unknown; couponCode?: string; customer?: { name?: string; document?: string; email?: string } };
+  try { body = await request.json(); } catch { return response({ error: 'Invalid request' }, 400); }
+  if (!Array.isArray(body.items) || body.items.length === 0 || body.items.length > 50) {
+    return response({ error: 'A valid item list is required' }, 400);
+  }
+
+  const dbHeaders = {
+    Authorization: `Bearer ${serviceKey}`,
+    apikey: serviceKey,
+    'Content-Type': 'application/json',
+  };
+  const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: { Authorization: authorization, apikey: serviceKey },
+  });
+  if (!userResponse.ok) return response({ error: 'Unauthorized' }, 401);
+  const user = await userResponse.json();
+
+  const checkout = await fetch(`${supabaseUrl}/rest/v1/rpc/create_order_secure`, {
+    method: 'POST',
+    // Keep the end-user JWT so auth.uid() is the buyer inside the SECURITY DEFINER RPC.
+    headers: { Authorization: authorization, apikey: serviceKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_items: body.items, p_coupon_code: body.couponCode ?? null }),
+  });
+  const order = await checkout.json().catch(() => null);
+  if (!checkout.ok || !order?.order_id) return response({ error: 'Não foi possível validar o pedido.' }, 400);
+
+  const chargePath = Deno.env.get('EVOPAY_CREATE_CHARGE_PATH') || '/pix';
+  const charge = await fetch(`https://pix.evopay.cash/v1${chargePath}`, {
+    method: 'POST',
+    headers: { 'API-Key': evoPayKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      amount: Number(order.total),
+      externalReference: order.order_id,
+      payerName: body.customer?.name,
+      payerDocument: body.customer?.document,
+      payerEmail: body.customer?.email ?? user.email,
+      callbackUrl: Deno.env.get('EVOPAY_WEBHOOK_URL'),
+    }),
+  });
+  const chargeBody = await charge.json().catch(() => ({}));
+  if (!charge.ok) return response({ error: 'Gateway de pagamento recusou a cobrança.' }, 502);
+
+  const providerId = chargeBody.id ?? chargeBody.data?.id ?? null;
+  await fetch(`${supabaseUrl}/rest/v1/payments`, {
+    method: 'POST',
+    headers: { ...dbHeaders, Prefer: 'resolution=merge-duplicates' },
+    body: JSON.stringify({
+      order_id: order.order_id,
+      amount: order.total,
+      status: 'PENDING',
+      provider: 'evopay',
+      provider_id: providerId,
+      external_id: order.order_id,
+      pix_code: chargeBody.qrCodeText ?? chargeBody.data?.qrCodeText ?? '',
+      pix_qr: chargeBody.qrCodeBase64 ?? chargeBody.qrCodeUrl ?? chargeBody.data?.qrCodeBase64 ?? '',
+      provider_status: chargeBody.status ?? 'PENDING',
+    }),
+  });
+
+  return response({
+    orderId: order.order_id,
+    total: order.total,
+    pixCode: chargeBody.qrCodeText ?? chargeBody.data?.qrCodeText ?? '',
+    pixQr: chargeBody.qrCodeBase64 ?? chargeBody.qrCodeUrl ?? chargeBody.data?.qrCodeBase64 ?? '',
+    providerId,
+  });
+});
