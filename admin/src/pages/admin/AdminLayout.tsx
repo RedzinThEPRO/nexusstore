@@ -49,6 +49,7 @@ const menuGroups: MenuGroup[] = [
     title: 'Atendimento',
     items: [
       { to: '/admin/mensagens', label: 'Mensagens', icon: MessageSquare },
+      { to: '/admin/suportes', label: 'Suportes', icon: MessageSquare },
       { to: '/admin/clientes', label: 'Clientes', icon: Users },
     ],
   },
