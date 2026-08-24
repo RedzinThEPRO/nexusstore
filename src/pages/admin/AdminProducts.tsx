@@ -199,13 +199,23 @@ function ProductForm({ product, categories, onClose, onSave }: {
               <option value="SINGLE">Único — um item neste produto</option><option value="MULTIPLE">Múltiplo — vários itens selecionáveis</option>
             </select></div>
           {form.inventory_mode === 'MULTIPLE' && <div className="space-y-2">
-            {form.variants.map((variant, index) => <div key={variant.id} className="grid grid-cols-[1fr_110px_100px_32px] gap-2 items-end">
-              <div><label className="label">Nome do item</label><input value={variant.name} onChange={e => setForm(f => ({ ...f, variants: f.variants.map((v,i) => i===index ? {...v,name:e.target.value} : v) }))} className="input" placeholder="Ex.: Conta nível 50" /></div>
-              <div><label className="label">Valor</label><input type="number" min="0.01" step="0.01" value={variant.price} onChange={e => setForm(f => ({ ...f, variants: f.variants.map((v,i) => i===index ? {...v,price:+e.target.value} : v) }))} className="input" /></div>
-              <div><label className="label">Estoque</label><input type="number" min="0" value={variant.stock} onChange={e => setForm(f => ({ ...f, variants: f.variants.map((v,i) => i===index ? {...v,stock:Math.max(0,+e.target.value)} : v) }))} className="input" /></div>
-              <button type="button" onClick={() => setForm(f => ({ ...f, variants: f.variants.filter((_,i) => i!==index) }))} className="grid h-10 w-8 place-items-center rounded-lg text-danger-400 hover:bg-white/5"><X className="h-4 w-4" /></button>
+            {form.variants.map((variant, index) => <div key={variant.id} className="rounded-xl border border-white/10 p-3 space-y-3">
+              <div className="grid gap-2 md:grid-cols-[1fr_130px_110px_32px] items-end">
+                <div><label className="label">Nome da opção *</label><input value={variant.name} onChange={e => setForm(f => ({ ...f, variants: f.variants.map((v,i) => i===index ? {...v,name:e.target.value} : v) }))} className="input" placeholder="Ex.: Conta nível 50" /></div>
+                <div><label className="label">Preço *</label><input type="number" min="0.01" step="0.01" value={variant.price} onChange={e => setForm(f => ({ ...f, variants: f.variants.map((v,i) => i===index ? {...v,price:+e.target.value} : v) }))} className="input" /></div>
+                <div><label className="label">Promoção</label><input type="number" min="0" step="0.01" value={variant.promo_price ?? 0} onChange={e => setForm(f => ({ ...f, variants: f.variants.map((v,i) => i===index ? {...v,promo_price:+e.target.value || undefined} : v) }))} className="input" /></div>
+                <button type="button" aria-label="Remover opção" onClick={() => setForm(f => ({ ...f, variants: f.variants.filter((_,i) => i!==index) }))} className="grid h-10 w-8 place-items-center rounded-lg text-danger-400 hover:bg-white/5"><X className="h-4 w-4" /></button>
+              </div>
+              <textarea value={variant.description ?? ''} onChange={e => setForm(f => ({ ...f, variants: f.variants.map((v,i) => i===index ? {...v,description:e.target.value} : v) }))} className="input resize-none" rows={2} placeholder="Descrição opcional da opção" />
+              <div className="grid gap-2 md:grid-cols-2">
+                <input type="number" min="0" value={variant.stock} onChange={e => setForm(f => ({ ...f, variants: f.variants.map((v,i) => i===index ? {...v,stock:Math.max(0,+e.target.value)} : v) }))} className="input" placeholder="Estoque" />
+                <input value={variant.sku ?? ''} onChange={e => setForm(f => ({ ...f, variants: f.variants.map((v,i) => i===index ? {...v,sku:e.target.value || undefined} : v) }))} className="input" placeholder="SKU opcional" />
+                <input value={variant.images?.[0] ?? ''} onChange={e => setForm(f => ({ ...f, variants: f.variants.map((v,i) => i===index ? {...v,images:e.target.value ? [e.target.value] : []} : v) }))} className="input" placeholder="URL da imagem opcional" />
+                <input value={variant.delivery_info ?? ''} onChange={e => setForm(f => ({ ...f, variants: f.variants.map((v,i) => i===index ? {...v,delivery_info:e.target.value || undefined} : v) }))} className="input" placeholder="Informações para entrega manual" />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-ink-200"><input type="checkbox" checked={variant.active !== false} onChange={e => setForm(f => ({ ...f, variants: f.variants.map((v,i) => i===index ? {...v,active:e.target.checked} : v) }))} /> Opção ativa</label>
             </div>)}
-            <button type="button" onClick={() => setForm(f => ({ ...f, variants: [...f.variants, { id: 'variant-' + Date.now(), name: '', price: f.price, stock: 1 }] }))} className="btn-outline text-sm"><Plus className="h-4 w-4" /> Adicionar item</button>
+            <button type="button" onClick={() => setForm(f => ({ ...f, variants: [...f.variants, { id: 'variant-' + Date.now(), name: '', price: f.price, stock: 1, active: true }] }))} className="btn-outline text-sm"><Plus className="h-4 w-4" /> Adicionar item</button>
           </div>}
         </div>
 
