@@ -154,6 +154,7 @@ export function Header() {
                       <p className="text-xs text-ink-300 truncate">{user.email}</p>
                     </div>
                     <div className="py-1">
+                      {user.role === 'SUPER_ADMIN' && <Link to="/admin" onClick={() => setProfileOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-neon-300 hover:bg-white/5">Painel Administrativo</Link>}
                       <Link to="/perfil" onClick={() => setProfileOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-ink-200 hover:bg-white/5 hover:text-white">
                         <User className="h-4 w-4" /> Meu Perfil
                       </Link>
