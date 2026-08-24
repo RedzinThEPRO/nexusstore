@@ -12,7 +12,8 @@ interface AuthContextValue {
   refresh: () => void;
   updateMyProfile: (patch: Partial<Profile>) => void;
   isAdmin: boolean;
-  verifyMfa: (code: string) => Promise<AuthResult>;
+  needsMfa: boolean;
+  verifyMfa: (code: string, factorId?: string) => Promise<AuthResult>;
   setupMfa: () => Promise<AuthResult>;
 }
 
@@ -66,14 +67,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { ok: true, requiresMfa: profile.role === 'SUPER_ADMIN' && aal?.currentLevel !== 'aal2' };
   };
 
-  const verifyMfa = async (code: string): Promise<AuthResult> => {
+  const verifyMfa = async (code: string, factorId?: string): Promise<AuthResult> => {
     if (!supabase) return { ok: false, error: 'Autenticação não configurada.' };
-    const { data: factors, error: listError } = await supabase.auth.mfa.listFactors();
-    const factor = factors?.totp?.find((candidate) => candidate.status === 'verified');
-    if (listError || !factor) return { ok: false, error: 'MFA não configurado para esta conta.' };
-    const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId: factor.id });
+    let targetFactorId = factorId;
+    if (!targetFactorId) {
+      const { data: factors, error: listError } = await supabase.auth.mfa.listFactors();
+      const factor = factors?.totp?.find((candidate) => candidate.status === 'verified');
+      if (listError || !factor) return { ok: false, error: 'MFA não configurado para esta conta.' };
+      targetFactorId = factor.id;
+    }
+    const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId: targetFactorId });
     if (challengeError || !challenge) return { ok: false, error: 'Não foi possível iniciar a verificação MFA.' };
-    const { error } = await supabase.auth.mfa.verify({ factorId: factor.id, challengeId: challenge.id, code: code.trim() });
+    const { error } = await supabase.auth.mfa.verify({ factorId: targetFactorId, challengeId: challenge.id, code: code.trim() });
     if (error) return { ok: false, error: 'Código MFA inválido.' };
     await refresh();
     return { ok: true };
@@ -82,7 +87,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setupMfa = async (): Promise<AuthResult> => {
     if (!supabase) return { ok: false, error: 'Autenticação não configurada.' };
     const { data: factors } = await supabase.auth.mfa.listFactors();
-    if (factors?.totp?.some((factor) => factor.status === 'verified')) return { ok: true };
+    const verified = factors?.totp?.find((factor) => factor.status === 'verified');
+    if (verified) return { ok: true, mfaSetup: { factorId: verified.id, qrCode: '', secret: '' } };
     const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'NexusStore Admin' });
     if (error || !data?.id || !data.totp) return { ok: false, error: 'Não foi possível iniciar a configuração MFA.' };
     return { ok: true, mfaSetup: { factorId: data.id, qrCode: data.totp.qr_code, secret: data.totp.secret } };
@@ -106,7 +112,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void supabase.from('profiles').update(safePatch).eq('id', user.id).select().single().then(({ data }) => { if (data) setUser(data as Profile); });
   };
 
-  return <AuthContext.Provider value={{ user, loading, login, register, logout, refresh, updateMyProfile, verifyMfa, setupMfa, isAdmin: user?.role === 'SUPER_ADMIN' && mfaVerified }}>{children}</AuthContext.Provider>;
+  const isAdmin = user?.role === 'SUPER_ADMIN' && mfaVerified;
+  const needsMfa = user?.role === 'SUPER_ADMIN' && !mfaVerified;
+
+  return <AuthContext.Provider value={{ user, loading, login, register, logout, refresh, updateMyProfile, isAdmin, needsMfa, verifyMfa, setupMfa }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {
