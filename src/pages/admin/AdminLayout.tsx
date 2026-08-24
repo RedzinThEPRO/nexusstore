@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import {
   LayoutDashboard, Package, Tag, ShoppingCart, Truck, Users,
   MessageSquare, Star, Ticket, BarChart3, ScrollText, Settings,
-  Menu, X, Gamepad2, Shield, ChevronRight, Home, FileText,
+  Menu, X, Gamepad2, Shield, ChevronRight, Home, FileText, Lock,
 } from 'lucide-react';
 
 interface MenuItem {
@@ -62,22 +62,92 @@ const menuGroups: MenuGroup[] = [
   },
 ];
 
+function MfaGate() {
+  const { verifyMfa, setupMfa } = useAuth();
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [setup, setSetup] = useState<{ factorId: string; qrCode: string; secret: string } | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const res = await setupMfa();
+      if (res.mfaSetup) setSetup(res.mfaSetup);
+    })();
+  }, [setupMfa]);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    const res = await verifyMfa(code, setup?.factorId);
+    setBusy(false);
+    if (!res.ok) setError(res.error ?? 'Código MFA inválido.');
+  };
+
+  return (
+    <div className="min-h-screen bg-ink-950 grid place-items-center px-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-6">
+          <div className="grid h-14 w-14 mx-auto place-items-center rounded-2xl bg-neon-500/15 border border-neon-500/30 shadow-glow mb-4">
+            <Lock className="h-7 w-7 text-neon-400" />
+          </div>
+          <h1 className="font-display text-xl font-bold text-white">Verificação MFA necessária</h1>
+          <p className="text-sm text-ink-300 mt-1">
+            Confirme o código do seu autenticador para acessar o Painel Administrativo.
+          </p>
+        </div>
+        <div className="card p-6 space-y-4">
+          {setup?.qrCode && (
+            <div className="space-y-2 text-sm text-ink-200 text-center">
+              <p>Escaneie o QR Code no seu aplicativo autenticador e confirme o código.</p>
+              <img src={setup.qrCode} alt="QR Code MFA" className="mx-auto h-44 w-44 rounded-lg bg-white p-2" />
+              <p className="break-all text-xs text-ink-400">Chave manual: {setup.secret}</p>
+            </div>
+          )}
+          <form onSubmit={submit} className="space-y-4">
+            <div>
+              <label className="label">Código do autenticador</label>
+              <input
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                className="input"
+                minLength={6}
+                maxLength={8}
+                required
+                autoFocus
+              />
+            </div>
+            {error && <p className="text-sm text-danger-400">{error}</p>}
+            <button type="submit" disabled={busy} className="btn-primary w-full py-3">
+              {busy ? 'Verificando...' : 'Verificar e acessar'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AdminLayout() {
-  const { user, loading, isAdmin } = useAuth();
+  const { user, loading, isAdmin, needsMfa } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    if (!loading && (!isSupabaseConfigured || !user || !isAdmin)) navigate('/');
-  }, [loading, user, isAdmin, navigate]);
+    if (!loading && (!isSupabaseConfigured || !user || (!isAdmin && !needsMfa))) navigate('/');
+  }, [loading, user, isAdmin, needsMfa, navigate]);
 
-  // Close sidebar on route change (mobile)
   useEffect(() => {
     setSidebarOpen(false);
   }, [location.pathname]);
 
-  if (loading || !isSupabaseConfigured || !user || !isAdmin) return null;
+  if (loading || !isSupabaseConfigured || !user) return null;
+  if (needsMfa && !isAdmin) return <MfaGate />;
+  if (!isAdmin) return null;
 
   const currentTitle = menuGroups
     .flatMap(g => g.items)
