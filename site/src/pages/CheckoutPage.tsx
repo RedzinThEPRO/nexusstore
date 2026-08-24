@@ -14,7 +14,9 @@ export function CheckoutPage() {
   const user = { email: '', username: 'Visitante', id: 'guest' };
   const navigate = useNavigate();
 
-  const [firstName, setFirstName] = useState(user?.first_name ?? '');
+  const [firstName, setFirstName] = useState('');
+  const [email, setEmail] = useState('');
+  const [emailConfirm, setEmailConfirm] = useState('');
   const [lastName, setLastName] = useState(user?.last_name ?? '');
   const [cpf, setCpf] = useState(user?.cpf ?? '');
   const [birthDate, setBirthDate] = useState(user?.birth_date ?? '');
@@ -81,6 +83,8 @@ export function CheckoutPage() {
 
   const validateForm = () => {
     if (!firstName.trim() || !lastName.trim()) return 'Informe nome e sobrenome.';
+    if (!email.trim() || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return 'Informe um e-mail válido.';
+    if (email !== emailConfirm) return 'A confirmação de e-mail deve ser igual.';
     if (!cpf.trim()) return 'Informe seu CPF.';
     if (!validateCPF(cpf)) return 'CPF inválido. Verifique os dígitos.';
     if (!birthDate) return 'Informe sua data de nascimento.';
@@ -148,7 +152,7 @@ export function CheckoutPage() {
   if (step === 'success') {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16 text-center">
-        <div className="grid h-20 w-20 mx-auto place-items-center rounded-full bg-success-500/15 border border-success-500/30 mb-6 animate-fade-in">
+        <div><label className="label">E-mail</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} className="input" required /></div><div><label className="label">Confirmar e-mail</label><input type="email" value={emailConfirm} onChange={e => setEmailConfirm(e.target.value)} className="input" required /></div><div className="grid h-20 w-20 mx-auto place-items-center rounded-full bg-success-500/15 border border-success-500/30 mb-6 animate-fade-in">
           <CheckCircle2 className="h-10 w-10 text-success-400" />
         </div>
         <h1 className="font-display text-3xl font-bold text-white mb-3">Compra realizada com sucesso!</h1>
