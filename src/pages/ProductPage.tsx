@@ -32,10 +32,10 @@ export function ProductPage() {
   const avg = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0;
   const category = categories.find(c => c.id === product.category_id);
   const selectedVariant = product.variants?.find(v => v.id === selectedVariantId);
-  const displayPrice = selectedVariant?.price ?? (product.promo_price ?? product.price);
+  const displayPrice = selectedVariant?.promo_price ?? selectedVariant?.price ?? (product.promo_price ?? product.price);
   const displayStock = selectedVariant?.stock ?? product.stock;
   const price = displayPrice;
-  const hasPromo = product.promo_price != null && product.promo_price < product.price;
+  const hasPromo = selectedVariant ? selectedVariant.promo_price != null && selectedVariant.promo_price < selectedVariant.price : product.promo_price != null && product.promo_price < product.price;
   const needsFF = product.requires_free_fire_id;
 
   const handleAdd = () => {
@@ -43,7 +43,7 @@ export function ProductPage() {
       setToast('Informe seu ID do Free Fire para continuar.');
       return;
     }
-    const cartProduct = selectedVariant ? { ...product, name: product.name + ' — ' + selectedVariant.name, price: selectedVariant.price, promo_price: undefined, stock: selectedVariant.stock, sku: selectedVariant.sku ?? product.sku } : product;
+    const cartProduct = selectedVariant ? { ...product, name: product.name + ' — ' + selectedVariant.name, description: selectedVariant.description || product.description, price: selectedVariant.promo_price ?? selectedVariant.price, promo_price: undefined, images: selectedVariant.images?.length ? selectedVariant.images : product.images, stock: selectedVariant.stock, sku: selectedVariant.sku ?? product.sku } : product;
     add(cartProduct, qty, needsFF ? ffid.trim() : undefined);
     navigate('/carrinho');
   };
@@ -105,6 +105,22 @@ export function ProductPage() {
           </div>
           <p className="text-ink-200 mb-6 whitespace-pre-wrap">{product.description}</p>
 
+          {product.inventory_mode === 'MULTIPLE' && (
+            <div className="card p-5 mb-6 border-neon-500/20">
+              <label className="label">Escolha uma opção</label>
+              <select value={selectedVariantId} onChange={e => { setSelectedVariantId(e.target.value); setQty(1); }} className="input">
+                <option value="">Selecione uma opção...</option>
+                {(product.variants ?? []).filter(v => v.active !== false).map(variant => (
+                  <option key={variant.id} value={variant.id} disabled={variant.stock <= 0}>
+                    {variant.name} — {formatBRL(variant.promo_price ?? variant.price)}{variant.stock <= 0 ? ' (esgotado)' : ''}
+                  </option>
+                ))}
+              </select>
+              {selectedVariant?.description && <p className="text-sm text-ink-300 mt-2 whitespace-pre-wrap">{selectedVariant.description}</p>}
+              {selectedVariant?.delivery_info && <p className="text-xs text-ink-400 mt-2">Entrega manual: {selectedVariant.delivery_info}</p>}
+            </div>
+          )}
+
           {/* Price */}
           <div className="card p-5 mb-6">
             {hasPromo && (
@@ -113,7 +129,7 @@ export function ProductPage() {
             <p className="text-3xl font-bold text-neon-300 mb-1">{formatBRL(price)}</p>
             <p className="text-xs text-ink-400">SKU: {product.sku}</p>
             <div className="mt-3 flex items-center gap-2">
-              {product.stock > 0 ? (
+              {displayStock > 0 ? (
                 <Badge variant="success">Em estoque: {displayStock}</Badge>
               ) : (
                 <Badge variant="danger">Esgotado</Badge>
