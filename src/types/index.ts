@@ -28,8 +28,13 @@ export interface Category {
 export interface ProductVariant {
   id: string;
   name: string;
+  description?: string;
   price: number;
+  promo_price?: number;
   stock: number;
+  images?: string[];
+  delivery_info?: string;
+  active: boolean;
   sku?: string;
 }
 
