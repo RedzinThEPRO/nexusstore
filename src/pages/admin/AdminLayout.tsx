@@ -63,21 +63,21 @@ const menuGroups: MenuGroup[] = [
 ];
 
 export function AdminLayout() {
-  const { user, isAdmin } = useAuth();
+  const { user, loading, isAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    if (!isSupabaseConfigured || !user || !isAdmin) navigate('/');
-  }, [user, isAdmin, navigate]);
+    if (!loading && (!isSupabaseConfigured || !user || !isAdmin)) navigate('/');
+  }, [loading, user, isAdmin, navigate]);
 
   // Close sidebar on route change (mobile)
   useEffect(() => {
     setSidebarOpen(false);
   }, [location.pathname]);
 
-  if (!isSupabaseConfigured || !user || !isAdmin) return null;
+  if (loading || !isSupabaseConfigured || !user || !isAdmin) return null;
 
   const currentTitle = menuGroups
     .flatMap(g => g.items)
