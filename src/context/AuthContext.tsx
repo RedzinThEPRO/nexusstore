@@ -28,16 +28,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!supabase) return null;
     const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
     if (error || !data) { setUser(null); return null; }
-    setUser(data as Profile);
     const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
     setMfaVerified(data.role !== 'SUPER_ADMIN' || aal?.currentLevel === 'aal2');
+    setUser(data as Profile);
     return data as Profile;
   }, []);
 
   const refresh = useCallback(() => {
     if (!supabase) { setUser(null); setMfaVerified(false); setLoading(false); return; }
-    void supabase.auth.getSession().then(({ data }) => {
-      if (data.session?.user) void loadProfile(data.session.user.id);
+    void supabase.auth.getSession().then(async ({ data }) => {
+      if (data.session?.user) await loadProfile(data.session.user.id);
       else { setUser(null); setMfaVerified(false); }
       setLoading(false);
     });
@@ -47,9 +47,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refresh();
     if (!supabase) return;
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) void loadProfile(session.user.id);
-      else { setUser(null); setMfaVerified(false); }
-      setLoading(false);
+      void (async () => {
+        if (session?.user) await loadProfile(session.user.id);
+        else { setUser(null); setMfaVerified(false); }
+        setLoading(false);
+      })();
     });
     return () => listener.subscription.unsubscribe();
   }, [refresh, loadProfile]);
