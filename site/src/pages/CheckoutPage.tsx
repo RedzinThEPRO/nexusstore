@@ -8,10 +8,11 @@ import type { OrderItem } from '@/types';
 import { EmptyState, Toast } from '@/components/ui';
 import { ShoppingCart, Shield, Zap, CheckCircle2, Copy, QrCode, ArrowRight, Package } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 
 export function CheckoutPage() {
   const { items, subtotal, clear } = useCart();
-  const user = { email: '', username: 'Visitante', id: 'guest' };
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const [firstName, setFirstName] = useState('');
