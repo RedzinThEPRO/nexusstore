@@ -1,6 +1,5 @@
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
-import { useAuth } from '@/context/AuthContext';
 import {
   getOrderById, getDeliveryByOrder, getMessagesByDelivery, addMessage,
   markMessagesRead, updateDelivery, addNotification, addReview, getReviewsByProduct,
@@ -18,7 +17,8 @@ import type { ChatMessage, Delivery, Notification, DeliveryStatus } from '@/type
 export function OrderDetailPage() {
   const { orderId } = useParams();
   const navigate = useNavigate();
-  const { user, isAdmin } = useAuth();
+  const user = { email: '', username: 'Visitante', id: 'guest' };
+  const isAdmin = false;
   const [toast, setToast] = useState('');
   const [input, setInput] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);

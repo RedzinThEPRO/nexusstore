@@ -1,6 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '@/context/CartContext';
-import { useAuth } from '@/context/AuthContext';
 import { formatBRL } from '@/lib/format';
 import { EmptyState, Toast } from '@/components/ui';
 import { Trash2, Minus, Plus, ShoppingCart, ArrowRight, Package } from 'lucide-react';
@@ -8,7 +7,6 @@ import { useState } from 'react';
 
 export function CartPage() {
   const { items, subtotal, remove, setQty, setFreeFireId } = useCart();
-  const { user } = useAuth();
   const navigate = useNavigate();
   const [toast, setToast] = useState('');
 
@@ -28,10 +26,6 @@ export function CartPage() {
   const goCheckout = () => {
     if (missingFF.length) {
       setToast('Preencha o ID do Free Fire nos produtos que precisam.');
-      return;
-    }
-    if (!user) {
-      navigate('/login?redirect=/checkout');
       return;
     }
     navigate('/checkout');

@@ -2,7 +2,6 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useState } from 'react';
 import { getProductBySlug, getReviewsByProduct, getCategories, addReview } from '@/lib/api';
 import { useCart } from '@/context/CartContext';
-import { useAuth } from '@/context/AuthContext';
 import { formatBRL } from '@/lib/format';
 import { Stars, Badge, EmptyState, Toast } from '@/components/ui';
 import { ShoppingCart, Package, Tag, Shield, Zap, Minus, Plus, ChevronLeft, MessageCircle, ListPlus } from 'lucide-react';
@@ -12,7 +11,6 @@ export function ProductPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
   const { add } = useCart();
-  const { user } = useAuth();
   const product = getProductBySlug(slug ?? '');
   const categories = getCategories();
   const [qty, setQty] = useState(1);

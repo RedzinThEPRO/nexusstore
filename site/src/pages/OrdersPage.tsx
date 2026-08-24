@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import { useAuth } from '@/context/AuthContext';
 import { getOrdersByUser } from '@/lib/api';
 import { formatBRL, formatDate } from '@/lib/format';
 import { EmptyState } from '@/components/ui';
@@ -16,7 +15,6 @@ const payChip: Record<PaymentStatus, string> = {
 };
 
 export function OrdersPage() {
-  const { user } = useAuth();
   if (!user) return null;
   const orders = getOrdersByUser(user.id).sort((a, b) => b.created_at.localeCompare(a.created_at));
 

@@ -33,9 +33,6 @@ export function Footer() {
           <div>
             <h4 className="text-sm font-semibold text-white mb-3">Conta</h4>
             <ul className="space-y-2 text-sm">
-              <li><Link to="/perfil" className="link">Meu perfil</Link></li>
-              <li><Link to="/pedidos" className="link">Meus pedidos</Link></li>
-              <li><Link to="/login" className="link">Entrar</Link></li>
               <li><Link to="/cadastro" className="link">Criar conta</Link></li>
             </ul>
           </div>

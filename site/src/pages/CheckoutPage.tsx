@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useCart } from '@/context/CartContext';
-import { useAuth } from '@/context/AuthContext';
 import { getCouponByCode, createPixPayment, getPixPaymentStatus } from '@/lib/api';
 import { uid } from '@/lib/store';
 import { formatBRL, validateCPF, getAge, formatCPFInput } from '@/lib/format';
@@ -12,7 +11,7 @@ import { supabase } from '@/lib/supabase';
 
 export function CheckoutPage() {
   const { items, subtotal, clear } = useCart();
-  const { user, updateMyProfile } = useAuth();
+  const user = { email: '', username: 'Visitante', id: 'guest' };
   const navigate = useNavigate();
 
   const [firstName, setFirstName] = useState(user?.first_name ?? '');
@@ -56,7 +55,6 @@ export function CheckoutPage() {
   }, [step, orderId, providerId, clear]);
 
   if (!user) {
-    navigate('/login?redirect=/checkout');
     return null;
   }
 
@@ -98,7 +96,6 @@ export function CheckoutPage() {
     if (err) { setToast(err); return; }
 
     // Save profile data
-    updateMyProfile({ first_name: firstName, last_name: lastName, cpf, birth_date: birthDate });
 
     // Create order
     const orderItems: OrderItem[] = items.map(i => ({
@@ -125,7 +122,7 @@ export function CheckoutPage() {
       }
       // Only the backend talks to EvoPay; the browser sends the order id and user JWT.
       const payment = await createPixPayment(createdOrder.order_id, {
-        name: firstName + ' ' + lastName, document: cpf, email: user.email,
+        name: firstName + ' ' + lastName, document: cpf, email,
       });
       setOrderId(payment.orderId);
       setProviderId(payment.providerId ?? '');
@@ -209,8 +206,8 @@ export function CheckoutPage() {
           <div className="card p-5">
             <h3 className="text-sm font-semibold text-white mb-3">Conta</h3>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="label">Usuário</label><p className="text-sm text-white">{user.username}</p></div>
-              <div><label className="label">E-mail</label><p className="text-sm text-white truncate">{user.email}</p></div>
+              
+              
             </div>
           </div>
 
