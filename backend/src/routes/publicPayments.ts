@@ -54,4 +54,22 @@ router.post('/pix', limiter, async (req, res) => {
   }
 });
 
+// Public GET for payment status (guest polling) - uses provider id
+router.get('/pix/:id', limiter, async (req, res) => {
+  try {
+    const id = idSchema.parse(req.params.id);
+    const { data: payment, error: paymentError } = await db.from('payments').select('id,order_id,provider_id,amount,status,pix_code,pix_qr').eq('provider_id', id).maybeSingle();
+    if (paymentError) throw paymentError;
+    if (!payment) return res.status(404).json({ error: 'Payment not found' });
+
+    const transaction = await evoPay.getPixTransaction(id);
+    return res.json({ id: transaction.id, status: transaction.status, amount: transaction.amount, qrCodeText: transaction.qrCodeText ?? null, qrCodeBase64: transaction.qrCodeBase64 ?? null });
+  } catch (error) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid provider id' });
+    if (error instanceof EvoPayError) return res.status(502).json({ error: 'Payment gateway error' });
+    console.error('publicPayments GET error', error);
+    return res.status(500).json({ error: 'Unable to fetch payment status' });
+  }
+});
+
 export const publicPaymentsRouter = router;
