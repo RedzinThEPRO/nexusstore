@@ -45,41 +45,6 @@ router.post('/orders', limiter, async (req, res) => {
 
     if (!validateCPF(input.customer.cpf)) return res.status(400).json({ error: 'CPF inválido.' });
 
-    // fetch products
-    const ids = Array.from(new Set(input.items.map(i => i.product_id)));
-    const { data: products, error: productsError } = await db.from('products').select('*').in('id', ids);
-    if (productsError) throw productsError;
-    if (!products || products.length !== ids.length) return res.status(400).json({ error: 'Um ou mais produtos inválidos.' });
-
-    const productMap: Record<string, any> = {};
-    products.forEach((p: any) => { productMap[p.id] = p; });
-
-    // validate items and calculate subtotal
-    let subtotal = 0;
-    for (const it of input.items) {
-      const p = productMap[it.product_id];
-      if (!p) return res.status(400).json({ error: `Produto não encontrado: ${it.product_id}` });
-      const allowQty = !!p.allow_quantity_selection;
-      if (!allowQty && it.quantity !== 1) return res.status(400).json({ error: `Quantidade inválida para produto ${p.name}.` });
-      if (!Number.isInteger(it.quantity) || it.quantity <= 0) return res.status(400).json({ error: 'Quantidade inválida.' });
-      if (it.quantity > p.stock) return res.status(409).json({ error: `Estoque insuficiente para ${p.name}.` });
-      if (p.requires_free_fire_id && !input.customer.freeFireId) return res.status(400).json({ error: `ID do Free Fire obrigatório para o produto ${p.name}.` });
-      const price = p.promo_price ?? p.price;
-      subtotal += Number(price) * it.quantity;
-    }
-
-    // coupon
-    let discount = 0;
-    if (input.coupon_code) {
-      const { data: coupon } = await db.from('coupons').select('*').eq('code', input.coupon_code).maybeSingle();
-      if (coupon && coupon.active) {
-        if (coupon.type === 'PERCENT') discount = Number((subtotal * coupon.value) / 100);
-        else discount = Number(coupon.value);
-      }
-    }
-
-    const total = Math.max(0, subtotal - discount);
-
     // upsert profile (guest) by email
     const { data: existingProfile } = await db.from('profiles').select('*').eq('email', input.customer.email).maybeSingle();
     let profileId = existingProfile?.id;
@@ -91,36 +56,21 @@ router.post('/orders', limiter, async (req, res) => {
       await db.from('profiles').update({ first_name: input.customer.fullName, cpf: input.customer.cpf, birth_date: input.customer.birthDate }).eq('id', profileId);
     }
 
-    // reserve stock atomically per product using conditional update
-    const updatedProducts: { id: string; qty: number }[] = [];
-    try {
-      for (const it of input.items) {
-        const { data: updated, error: updateError } = await db.from('products').update({ stock: db.raw('stock - ?', [it.quantity]) }).eq('id', it.product_id).gte('stock', it.quantity).select('id').maybeSingle();
-        // Note: db.raw may not be available in postgrest client; fallback to RPC is preferred. If update failed, throw.
-        if (updateError || !updated) throw new Error(`Estoque insuficiente para ${it.product_id}`);
-        updatedProducts.push({ id: it.product_id, qty: it.quantity });
-      }
-    } catch (err) {
-      // try to rollback previous updates
-      for (const u of updatedProducts) {
-        await db.from('products').update({ stock: db.raw('stock + ?', [u.qty]) }).eq('id', u.id);
-      }
-      return res.status(409).json({ error: 'Estoque insuficiente ao processar o pedido.' });
+    // Prepare items for RPC: only product_id and quantity (+ free_fire_id if present)
+    const rpcItems = input.items.map(i => ({ product_id: i.product_id, quantity: i.quantity, free_fire_id: (input.customer.freeFireId ?? null) }));
+
+    // Call the RPC to create the order atomically
+    const { data: rpcResult, error: rpcError } = await db.rpc('create_order_public', { p_user_id: profileId, p_items: JSON.stringify(rpcItems), p_coupon_code: input.coupon_code ?? null });
+    if (rpcError) {
+      console.error('RPC create_order_public error', rpcError);
+      return res.status(400).json({ error: rpcError.message || 'Não foi possível criar o pedido.' });
     }
 
-    // create order
-    const { data: createdOrder } = await db.from('orders').insert({ user_id: profileId, subtotal, discount, total, status: 'PENDING', payment_status: 'PENDING' }).select().single();
-    if (!createdOrder || !createdOrder.id) throw new Error('Não foi possível criar o pedido');
+    const orderId = rpcResult?.order_id ?? rpcResult?.orderId ?? null;
+    const total = rpcResult?.total ?? null;
+    if (!orderId) return res.status(500).json({ error: 'Pedido criado, mas sem ID retornado.' });
 
-    // insert order items and inventory movements
-    for (const it of input.items) {
-      const p = productMap[it.product_id];
-      const price = p.promo_price ?? p.price;
-      await db.from('order_items').insert({ order_id: createdOrder.id, product_id: p.id, product_name: p.name, product_image: p.images?.[0] ?? null, price: Number(price), quantity: it.quantity, free_fire_id: input.customer.freeFireId ?? null });
-      await db.from('inventory_movements').insert({ product_id: p.id, type: 'out', quantity: it.quantity, reason: 'order_reservation', created_at: new Date().toISOString() });
-    }
-
-    return res.status(201).json({ orderId: createdOrder.id, total });
+    return res.status(201).json({ orderId, total });
   } catch (error) {
     if (error instanceof z.ZodError) return res.status(400).json({ error: 'Payload inválido' });
     console.error('publicOrders error', error);
