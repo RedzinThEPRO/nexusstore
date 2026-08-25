@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useCart } from '@/context/CartContext';
-import { getCouponByCode, createPixPayment, getPixPaymentStatus } from '@/lib/api';
+import { getCouponByCode, createPixPayment, getPixPaymentStatus, createPublicOrder, createPublicPixPayment, getPublicPixStatus } from '@/lib/api';
 import { uid } from '@/lib/store';
 import { formatBRL, validateCPF, getAge, formatCPFInput } from '@/lib/format';
 import type { OrderItem } from '@/types';
@@ -21,6 +21,7 @@ export function CheckoutPage() {
   const [lastName, setLastName] = useState(user?.last_name ?? '');
   const [cpf, setCpf] = useState(user?.cpf ?? '');
   const [birthDate, setBirthDate] = useState(user?.birth_date ?? '');
+  const [phone, setPhone] = useState<string>(user?.phone ?? '');
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number } | null>(null);
   const [couponError, setCouponError] = useState('');
@@ -37,29 +38,40 @@ export function CheckoutPage() {
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   useEffect(() => {
-    const client = supabase;
-    if (!client || step !== 'payment' || !orderId || !providerId) return;
+    if (step !== 'payment' || !orderId || !providerId) return;
     let active = true;
     const check = async () => {
-      const [gatewayResult, orderResult] = await Promise.allSettled([
-        getPixPaymentStatus(providerId),
-        client.from('orders').select('payment_status').eq('id', orderId).maybeSingle(),
-      ]);
-      if (!active) return;
-      if (gatewayResult.status === 'fulfilled') setPaymentStatus(gatewayResult.value.status);
-      if (orderResult.status === 'fulfilled' && orderResult.value.data?.payment_status === 'PAID') {
-        clear();
-        setStep('success');
+      try {
+        if (user) {
+          // authenticated flow: keep existing behavior
+          const [gatewayResult, orderResult] = await Promise.allSettled([
+            getPixPaymentStatus(providerId),
+            supabase.from('orders').select('payment_status').eq('id', orderId).maybeSingle(),
+          ]);
+          if (!active) return;
+          if (gatewayResult.status === 'fulfilled') setPaymentStatus(gatewayResult.value.status);
+          if (orderResult.status === 'fulfilled' && orderResult.value.data?.payment_status === 'PAID') {
+            clear();
+            setStep('success');
+          }
+        } else {
+          // guest polling via public endpoint
+          const gateway = await getPublicPixStatus(providerId);
+          if (!active) return;
+          setPaymentStatus(gateway.status);
+          if (gateway.status === 'PAID') {
+            clear();
+            setStep('success');
+          }
+        }
+      } catch (e) {
+        // ignore transient errors
       }
     };
     void check();
     const timer = window.setInterval(check, 5000);
     return () => { active = false; window.clearInterval(timer); };
-  }, [step, orderId, providerId, clear]);
-
-  if (!user) {
-    return null;
-  }
+  }, [step, orderId, providerId, clear, user]);
 
   if (items.length === 0 && step !== 'success') {
     return <EmptyState icon={<ShoppingCart className="h-12 w-12" />} title="Carrinho vazio"
@@ -84,7 +96,7 @@ export function CheckoutPage() {
 
   const validateForm = () => {
     if (!firstName.trim() || !lastName.trim()) return 'Informe nome e sobrenome.';
-    if (!email.trim() || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return 'Informe um e-mail válido.';
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Informe um e-mail válido.';
     if (email !== emailConfirm) return 'A confirmação de e-mail deve ser igual.';
     if (!cpf.trim()) return 'Informe seu CPF.';
     if (!validateCPF(cpf)) return 'CPF inválido. Verifique os dígitos.';
@@ -92,6 +104,7 @@ export function CheckoutPage() {
     const age = getAge(birthDate);
     if (age < 16) return 'Você precisa ter pelo menos 16 anos para comprar.';
     if (age > 120) return 'Data de nascimento inválida.';
+    if (!phone.trim()) return 'Informe seu telefone.';
     if (!termsAccepted) return 'Você precisa aceitar os Termos de Privacidade para continuar.';
     return null;
   };
@@ -116,25 +129,49 @@ export function CheckoutPage() {
 
     setCreatingPayment(true);
     try {
-      // The secure RPC creates the order using server-side prices, discounts and stock.
-      const { data: createdOrder, error: orderError } = await supabase.rpc('create_order_secure', {
-        p_items: orderItems.map(i => ({ product_id: i.product_id, quantity: i.quantity, free_fire_id: i.free_fire_id })),
-        p_coupon_code: appliedCoupon?.code ?? null,
-      });
-      if (orderError || !createdOrder?.order_id) {
-        setToast(orderError?.message || 'Não foi possível criar o pedido.');
-        return;
+      let createdOrderResp: { orderId: string; total: number } | null = null;
+
+      if (user) {
+        // authenticated flow
+        const { data: createdOrder, error: orderError } = await supabase.rpc('create_order_secure', {
+          p_items: orderItems.map(i => ({ product_id: i.product_id, quantity: i.quantity, free_fire_id: i.free_fire_id })),
+          p_coupon_code: appliedCoupon?.code ?? null,
+        });
+        if (orderError || !createdOrder?.order_id) {
+          setToast(orderError?.message || 'Não foi possível criar o pedido.');
+          return;
+        }
+        createdOrderResp = { orderId: createdOrder.order_id, total: createdOrder.total };
+      } else {
+        // guest flow: call public endpoints
+        const customerPayload = {
+          fullName: `${firstName} ${lastName}`.trim(),
+          cpf: cpf.replace(/\D/g, ''),
+          birthDate,
+          email: email.trim().toLowerCase(),
+          phone: phone.replace(/\D/g, ''),
+        };
+        const body = await createPublicOrder({ customer: customerPayload, items: orderItems.map(i => ({ product_id: i.product_id, quantity: i.quantity, free_fire_id: i.free_fire_id })), coupon_code: appliedCoupon?.code ?? null });
+        createdOrderResp = { orderId: body.orderId, total: body.total };
       }
-      // Only the backend talks to EvoPay; the browser sends the order id and user JWT.
-      const payment = await createPixPayment(createdOrder.order_id, {
-        name: firstName + ' ' + lastName, document: cpf, email,
-      });
-      setOrderId(payment.orderId);
-      setProviderId(payment.providerId ?? '');
-      setPaymentAmount(payment.amount);
-      setPaymentStatus(payment.status);
-      setPixCode(payment.pixCode ?? '');
-      setPixQr(payment.pixQr ?? '');
+
+      if (!createdOrderResp) throw new Error('Não foi possível criar o pedido.');
+
+      // create PIX payment
+      const customerForPayment = { name: `${firstName} ${lastName}`.trim(), document: cpf.replace(/\D/g, ''), email: email.trim().toLowerCase() };
+      let paymentResp;
+      if (user) {
+        paymentResp = await createPixPayment(createdOrderResp.orderId, customerForPayment);
+      } else {
+        paymentResp = await createPublicPixPayment(createdOrderResp.orderId, customerForPayment);
+      }
+
+      setOrderId(paymentResp.orderId);
+      setProviderId(paymentResp.providerId ?? '');
+      setPaymentAmount(paymentResp.amount);
+      setPaymentStatus(paymentResp.status);
+      setPixCode(paymentResp.pixCode ?? '');
+      setPixQr(paymentResp.pixQr ?? '');
       setStep('payment');
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Não foi possível gerar o PIX.');
@@ -153,7 +190,8 @@ export function CheckoutPage() {
   if (step === 'success') {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16 text-center">
-        <div><label className="label">E-mail</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} className="input" required /></div><div><label className="label">Confirmar e-mail</label><input type="email" value={emailConfirm} onChange={e => setEmailConfirm(e.target.value)} className="input" required /></div><div className="grid h-20 w-20 mx-auto place-items-center rounded-full bg-success-500/15 border border-success-500/30 mb-6 animate-fade-in">
+        <div><label className="label">E-mail</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} className="input" required /></div><div><label className="label">Con[...]</div>
+        <div className="mb-6 inline-flex items-center justify-center w-full">
           <CheckCircle2 className="h-10 w-10 text-success-400" />
         </div>
         <h1 className="font-display text-3xl font-bold text-white mb-3">Compra realizada com sucesso!</h1>
@@ -175,7 +213,7 @@ export function CheckoutPage() {
         <h1 className="font-display text-3xl font-bold text-white mb-6">Pagamento via PIX</h1>
         <div className="card p-6 text-center">
           <div className="grid h-48 w-48 mx-auto place-items-center rounded-2xl bg-white p-4 mb-4">
-            {pixQr ? <img src={pixQr.startsWith('data:') || pixQr.startsWith('http') ? pixQr : `data:image/png;base64,${pixQr}`} alt="QR Code PIX" className="h-40 w-40 object-contain" /> : <QrCode className="h-40 w-40 text-ink-950" />}
+            {pixQr ? <img src={pixQr.startsWith('data:') || pixQr.startsWith('http') ? pixQr : `data:image/png;base64,${pixQr}`} alt="QR Code PIX" className="h-40 w-40 object-contain" /> : <QrCode className="h-40 w-40 text-ink-500" />}
           </div>
           <p className="text-3xl font-bold text-neon-300 mb-1">{paymentAmount !== null ? formatBRL(paymentAmount) : '—'}</p>
           <p className="text-sm text-ink-300 mb-4">Pedido #{orderId.slice(-8).toUpperCase()}</p>
@@ -211,8 +249,7 @@ export function CheckoutPage() {
           <div className="card p-5">
             <h3 className="text-sm font-semibold text-white mb-3">Conta</h3>
             <div className="grid grid-cols-2 gap-3">
-              
-              
+              {/* reserved for account fields */}
             </div>
           </div>
 
@@ -235,6 +272,18 @@ export function CheckoutPage() {
               <div>
                 <label className="label">Data de nascimento *</label>
                 <input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} className="input" />
+              </div>
+              <div>
+                <label className="label">E-mail *</label>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="input" />
+              </div>
+              <div>
+                <label className="label">Confirmar e-mail *</label>
+                <input type="email" value={emailConfirm} onChange={e => setEmailConfirm(e.target.value)} className="input" />
+              </div>
+              <div>
+                <label className="label">Telefone *</label>
+                <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="(00) 90000-0000" className="input" />
               </div>
             </div>
           </div>
