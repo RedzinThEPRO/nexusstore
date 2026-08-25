@@ -169,7 +169,7 @@ export function getNotifications(userId: string): Notification[] {
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 export function saveNotifications(n: Notification[]): void { write(STORE_KEYS.notifications, n); }
-export function addNotification(n: Notification): void {
+export function addNotification(n: Notification[]): void {
   const list = read<Notification[]>(STORE_KEYS.notifications, []);
   list.push(n); saveNotifications(list);
 }
@@ -177,7 +177,6 @@ export function markNotificationRead(id: string): void {
   const list = read<Notification[]>(STORE_KEYS.notifications, []);
   const item = list.find(n => n.id === id);
   if (item) item.read = true;
-  saveNotifications(list);
 }
 export function markAllNotificationsRead(userId: string): void {
   const list = read<Notification[]>(STORE_KEYS.notifications, []);
@@ -238,4 +237,33 @@ export function createPixPayment(orderId: string, customer: { name: string; docu
 }
 export function getPixPaymentStatus(providerId: string): Promise<{ id: string; status: string; amount: number }> {
   return backendRequest('/api/payments/pix/' + encodeURIComponent(providerId));
+}
+
+// ---- Public (guest) endpoints - no auth required ----
+export async function createPublicOrder(payload: { customer: { fullName: string; cpf: string; birthDate: string; email: string; phone: string; freeFireId?: string | null }; items: { product_id: string; quantity: number; free_fire_id?: string | null }[]; coupon_code?: string | null }) {
+  if (!backendUrl) throw new Error('Backend não configurado.');
+  const res = await fetch(backendUrl + '/api/public/orders', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || 'Não foi possível criar o pedido.');
+  return body;
+}
+
+export async function createPublicPixPayment(orderId: string, customer: { name: string; document: string; email: string }) {
+  if (!backendUrl) throw new Error('Backend não configurado.');
+  const res = await fetch(backendUrl + '/api/public/payments/pix', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId, customer }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || 'Não foi possível criar o pagamento PIX.');
+  return body as BackendPayment;
+}
+
+export async function getPublicPixStatus(providerId: string): Promise<{ id: string; status: string; amount: number; qrCodeText?: string; qrCodeBase64?: string }> {
+  if (!backendUrl) throw new Error('Backend não configurado.');
+  const res = await fetch(backendUrl + '/api/public/payments/pix/' + encodeURIComponent(providerId));
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || 'Não foi possível obter o status do PIX.');
+  return body;
 }
