@@ -8,9 +8,16 @@ import { getReviewsByProduct } from '@/lib/api';
 export function ProductCard({ product }: { product: Product }) {
   const reviews = getReviewsByProduct(product.id);
   const rating = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0;
-  const price = product.promo_price ?? product.price;
-  const hasPromo = product.promo_price != null && product.promo_price < product.price;
+  const isMultiple = product.inventory_mode === 'MULTIPLE';
+  const activeVariants = (product.variants ?? []).filter(v => v.active !== false);
+  const variantPrices = activeVariants.map(v =>
+    v.promo_price && v.promo_price > 0 && v.promo_price < v.price ? v.promo_price : v.price);
+  const price = isMultiple
+    ? (variantPrices.length ? Math.min(...variantPrices) : 0)
+    : (product.promo_price ?? product.price);
+  const hasPromo = !isMultiple && product.promo_price != null && product.promo_price < product.price;
   const discount = hasPromo ? Math.round((1 - (product.promo_price! / product.price)) * 100) : 0;
+  const stock = isMultiple ? activeVariants.reduce((s, v) => s + v.stock, 0) : product.stock;
 
   return (
     <Link to={`/produto/${product.slug}`}
@@ -28,11 +35,11 @@ export function ProductCard({ product }: { product: Product }) {
         {hasPromo && (
           <span className="absolute top-2 left-2 chip-accent">-{discount}%</span>
         )}
-        {product.stock <= 0 && (
+        {stock <= 0 && (
           <span className="absolute top-2 right-2 chip-danger">Esgotado</span>
         )}
-        {product.stock > 0 && product.stock <= 5 && (
-          <span className="absolute top-2 right-2 chip-warning">Últimas {product.stock}</span>
+        {stock > 0 && stock <= 5 && (
+          <span className="absolute top-2 right-2 chip-warning">Últimas {stock}</span>
         )}
       </div>
 
@@ -54,6 +61,7 @@ export function ProductCard({ product }: { product: Product }) {
           {hasPromo && (
             <p className="text-xs text-ink-400 line-through">{formatBRL(product.price)}</p>
           )}
+          {isMultiple && <p className="text-[10px] text-ink-400">A partir de</p>}
           <p className="text-lg font-bold text-neon-300">{formatBRL(price)}</p>
         </div>
       </div>

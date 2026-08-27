@@ -5,8 +5,9 @@ import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
 import { formatBRL } from '@/lib/format';
 import { Stars, Badge, EmptyState, Toast } from '@/components/ui';
-import { ShoppingCart, Package, Tag, Shield, Zap, Minus, Plus, ChevronLeft, MessageCircle, ListPlus } from 'lucide-react';
+import { ShoppingCart, Package, Tag, Shield, Zap, Minus, Plus, ChevronLeft, MessageCircle } from 'lucide-react';
 import { uid } from '@/lib/store';
+import type { ProductVariant } from '@/types';
 
 export function ProductPage() {
   const { slug } = useParams();
@@ -16,7 +17,7 @@ export function ProductPage() {
   const product = getProductBySlug(slug ?? '');
   const categories = getCategories();
   const [qty, setQty] = useState(1);
-  const [selectedVariantId, setSelectedVariantId] = useState(product?.variants?.[0]?.id ?? '');
+  const [selectedVariantId, setSelectedVariantId] = useState('');
   const [ffid, setFfid] = useState('');
   const [toast, setToast] = useState('');
   const [showReview, setShowReview] = useState(false);
@@ -31,20 +32,36 @@ export function ProductPage() {
   const reviews = getReviewsByProduct(product.id);
   const avg = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0;
   const category = categories.find(c => c.id === product.category_id);
-  const selectedVariant = product.variants?.find(v => v.id === selectedVariantId);
-  const displayPrice = selectedVariant?.promo_price ?? selectedVariant?.price ?? (product.promo_price ?? product.price);
-  const displayStock = selectedVariant?.stock ?? product.stock;
-  const price = displayPrice;
-  const hasPromo = selectedVariant ? selectedVariant.promo_price != null && selectedVariant.promo_price < selectedVariant.price : product.promo_price != null && product.promo_price < product.price;
+  const isMultiple = product.inventory_mode === 'MULTIPLE';
+  const availableVariants = (product.variants ?? []).filter(v => v.active !== false);
+  const selectedVariant = availableVariants.find(v => v.id === selectedVariantId);
+  const variantPrice = (v: ProductVariant) =>
+    v.promo_price && v.promo_price > 0 && v.promo_price < v.price ? v.promo_price : v.price;
+  const price = selectedVariant ? variantPrice(selectedVariant) : (product.promo_price ?? product.price);
+  const displayStock = isMultiple
+    ? (selectedVariant ? selectedVariant.stock : availableVariants.reduce((s, v) => s + v.stock, 0))
+    : product.stock;
+  const hasPromo = selectedVariant
+    ? selectedVariant.promo_price != null && selectedVariant.promo_price > 0 && selectedVariant.promo_price < selectedVariant.price
+    : !isMultiple && product.promo_price != null && product.promo_price < product.price;
   const needsFF = product.requires_free_fire_id;
+  const allowQty = product.allow_quantity_selection !== false;
+  const maxQty = Math.max(1, selectedVariant ? selectedVariant.stock : (isMultiple ? 1 : product.stock));
 
   const handleAdd = () => {
+    if (isMultiple && !selectedVariant) {
+      setToast('Selecione uma opção do produto para continuar.');
+      return;
+    }
     if (needsFF && !ffid.trim()) {
       setToast('Informe seu ID do Free Fire para continuar.');
       return;
     }
-    const cartProduct = selectedVariant ? { ...product, name: product.name + ' — ' + selectedVariant.name, description: selectedVariant.description || product.description, price: selectedVariant.promo_price ?? selectedVariant.price, promo_price: undefined, images: selectedVariant.images?.length ? selectedVariant.images : product.images, stock: selectedVariant.stock, sku: selectedVariant.sku ?? product.sku } : product;
-    add(cartProduct, qty, needsFF ? ffid.trim() : undefined);
+    if (displayStock <= 0) {
+      setToast('Esta opção está sem estoque no momento.');
+      return;
+    }
+    add(product, qty, needsFF ? ffid.trim() : undefined, selectedVariant);
     navigate('/carrinho');
   };
 
@@ -72,8 +89,8 @@ export function ProductPage() {
         {/* Images */}
         <div>
           <div className="card overflow-hidden rounded-2xl aspect-square bg-ink-900">
-            {product.images[0] ? (
-              <img src={product.images[0]} alt={product.name} className="h-full w-full object-cover" />
+            {(selectedVariant?.images?.[0] ?? product.images[0]) ? (
+              <img src={selectedVariant?.images?.[0] ?? product.images[0]} alt={product.name} className="h-full w-full object-cover" />
             ) : (
               <div className="h-full w-full grid place-items-center text-ink-500">
                 <Package className="h-20 w-20" />
@@ -105,29 +122,60 @@ export function ProductPage() {
           </div>
           <p className="text-ink-200 mb-6 whitespace-pre-wrap">{product.description}</p>
 
-          {product.inventory_mode === 'MULTIPLE' && (
+          {isMultiple && (
             <div className="card p-5 mb-6 border-neon-500/20">
-              <label className="label">Escolha uma opção</label>
-              <select value={selectedVariantId} onChange={e => { setSelectedVariantId(e.target.value); setQty(1); }} className="input">
-                <option value="">Selecione uma opção...</option>
-                {(product.variants ?? []).filter(v => v.active !== false).map(variant => (
-                  <option key={variant.id} value={variant.id} disabled={variant.stock <= 0}>
-                    {variant.name} — {formatBRL(variant.promo_price ?? variant.price)}{variant.stock <= 0 ? ' (esgotado)' : ''}
-                  </option>
-                ))}
-              </select>
-              {selectedVariant?.description && <p className="text-sm text-ink-300 mt-2 whitespace-pre-wrap">{selectedVariant.description}</p>}
-              {selectedVariant?.delivery_info && <p className="text-xs text-ink-400 mt-2">Entrega manual: {selectedVariant.delivery_info}</p>}
+              <p className="label mb-3">Escolha uma opção *</p>
+              {availableVariants.length === 0 ? (
+                <p className="text-sm text-ink-400">Nenhuma opção disponível no momento.</p>
+              ) : (
+                <div className="space-y-2">
+                  {availableVariants.map(variant => {
+                    const soldOut = variant.stock <= 0;
+                    const selected = variant.id === selectedVariantId;
+                    return (
+                      <button key={variant.id} type="button" disabled={soldOut}
+                        onClick={() => { setSelectedVariantId(variant.id); setQty(1); }}
+                        className={`w-full text-left rounded-xl border p-3 transition flex items-start gap-3 ${
+                          selected ? 'border-neon-500 bg-neon-500/10' : 'border-white/10 hover:border-white/25'
+                        } ${soldOut ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                        <span className={`mt-1 grid h-4 w-4 shrink-0 place-items-center rounded-full border ${selected ? 'border-neon-400' : 'border-ink-500'}`}>
+                          {selected && <span className="h-2 w-2 rounded-full bg-neon-400" />}
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm font-semibold text-white">{variant.name}</span>
+                          {variant.description && <span className="block text-xs text-ink-300 mt-0.5 whitespace-pre-wrap">{variant.description}</span>}
+                          <span className="block text-xs text-ink-400 mt-1">{soldOut ? 'Esgotado' : `Estoque: ${variant.stock}`}</span>
+                        </span>
+                        <span className="text-right shrink-0">
+                          <span className="block text-sm font-bold text-neon-300">{formatBRL(variantPrice(variant))}</span>
+                          {variant.promo_price != null && variant.promo_price > 0 && variant.promo_price < variant.price && (
+                            <span className="block text-xs text-ink-400 line-through">{formatBRL(variant.price)}</span>
+                          )}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {selectedVariant?.delivery_info && <p className="text-xs text-ink-400 mt-3">Entrega manual: {selectedVariant.delivery_info}</p>}
             </div>
           )}
 
           {/* Price */}
           <div className="card p-5 mb-6">
             {hasPromo && (
-              <p className="text-sm text-ink-400 line-through">{formatBRL(product.price)}</p>
+              <p className="text-sm text-ink-400 line-through">{formatBRL(selectedVariant ? selectedVariant.price : product.price)}</p>
             )}
-            <p className="text-3xl font-bold text-neon-300 mb-1">{formatBRL(price)}</p>
-            <p className="text-xs text-ink-400">SKU: {product.sku}</p>
+            {isMultiple && !selectedVariant ? (
+              <p className="text-3xl font-bold text-neon-300 mb-1">
+                {availableVariants.length > 0
+                  ? `A partir de ${formatBRL(Math.min(...availableVariants.map(variantPrice)))}`
+                  : 'Indisponível'}
+              </p>
+            ) : (
+              <p className="text-3xl font-bold text-neon-300 mb-1">{formatBRL(price)}</p>
+            )}
+            <p className="text-xs text-ink-400">SKU: {selectedVariant?.sku ?? product.sku}</p>
             <div className="mt-3 flex items-center gap-2">
               {displayStock > 0 ? (
                 <Badge variant="success">Em estoque: {displayStock}</Badge>
@@ -149,21 +197,26 @@ export function ProductPage() {
           )}
 
           {/* Quantity + Add */}
-          <div className="flex items-center gap-3 mb-6">
-            <div className="flex items-center gap-1 card rounded-xl p-1">
-              <button onClick={() => setQty(q => Math.max(1, q - 1))} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-white/5 text-ink-200">
-                <Minus className="h-4 w-4" />
-              </button>
-              <span className="w-10 text-center text-white font-semibold">{qty}</span>
-              <button onClick={() => setQty(q => Math.min(displayStock, q + 1))} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-white/5 text-ink-200">
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
-            <button onClick={handleAdd} disabled={displayStock <= 0 || (product.inventory_mode === 'MULTIPLE' && !selectedVariant)}
-              className="btn-primary flex-1 py-3 text-base">
+          <div className="flex items-center gap-3 mb-2">
+            {allowQty && (
+              <div className="flex items-center gap-1 card rounded-xl p-1">
+                <button onClick={() => setQty(q => Math.max(1, q - 1))} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-white/5 text-ink-200">
+                  <Minus className="h-4 w-4" />
+                </button>
+                <span className="w-10 text-center text-white font-semibold">{qty}</span>
+                <button onClick={() => setQty(q => Math.min(maxQty, q + 1))} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-white/5 text-ink-200">
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+            <button onClick={handleAdd} disabled={displayStock <= 0}
+              className="btn-primary flex-1 py-3 text-base disabled:opacity-60 disabled:cursor-not-allowed">
               <ShoppingCart className="h-5 w-5" /> Adicionar ao Carrinho
             </button>
           </div>
+          <p className="text-xs text-accent-400 mb-6 min-h-4">
+            {isMultiple && !selectedVariant ? 'Selecione uma opção para continuar.' : ''}
+          </p>
 
           {/* Trust */}
           <div className="grid grid-cols-3 gap-3 text-center">

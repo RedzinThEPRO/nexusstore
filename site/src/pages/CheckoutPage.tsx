@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useCart } from '@/context/CartContext';
+import { useCart, itemKey, itemUnitPrice } from '@/context/CartContext';
 import { getCouponByCode, createPixPayment, getPixPaymentStatus, createPublicOrder, createPublicPixPayment, getPublicPixStatus } from '@/lib/api';
 import { uid } from '@/lib/store';
 import { formatBRL, validateCPF, getAge, formatCPFInput } from '@/lib/format';
@@ -46,7 +46,9 @@ export function CheckoutPage() {
           // authenticated flow: keep existing behavior
           const [gatewayResult, orderResult] = await Promise.allSettled([
             getPixPaymentStatus(providerId),
-            supabase.from('orders').select('payment_status').eq('id', orderId).maybeSingle(),
+            supabase
+              ? supabase.from('orders').select('payment_status').eq('id', orderId).maybeSingle()
+              : Promise.resolve({ data: null }),
           ]);
           if (!active) return;
           if (gatewayResult.status === 'fulfilled') setPaymentStatus(gatewayResult.value.status);
@@ -118,8 +120,9 @@ export function CheckoutPage() {
     // Create order
     const orderItems: OrderItem[] = items.map(i => ({
       id: uid('oi'), product_id: i.product.id, product_name: i.product.name,
-      product_image: i.product.images[0] ?? '', price: i.product.promo_price ?? i.product.price,
+      product_image: i.product.images[0] ?? '', price: itemUnitPrice(i),
       quantity: i.quantity, free_fire_id: i.free_fire_id,
+      variant_id: i.variant_id, variant_name: i.variant_name,
     }));
 
     if (!supabase) {
@@ -134,7 +137,7 @@ export function CheckoutPage() {
       if (user) {
         // authenticated flow
         const { data: createdOrder, error: orderError } = await supabase.rpc('create_order_secure', {
-          p_items: orderItems.map(i => ({ product_id: i.product_id, quantity: i.quantity, free_fire_id: i.free_fire_id })),
+          p_items: orderItems.map(i => ({ product_id: i.product_id, variant_id: i.variant_id ?? null, quantity: i.quantity, free_fire_id: i.free_fire_id })),
           p_coupon_code: appliedCoupon?.code ?? null,
         });
         if (orderError || !createdOrder?.order_id) {
@@ -150,8 +153,9 @@ export function CheckoutPage() {
           birthDate,
           email: email.trim().toLowerCase(),
           phone: phone.replace(/\D/g, ''),
+          freeFireId: items.find(i => i.free_fire_id?.trim())?.free_fire_id?.trim() ?? undefined,
         };
-        const body = await createPublicOrder({ customer: customerPayload, items: orderItems.map(i => ({ product_id: i.product_id, quantity: i.quantity, free_fire_id: i.free_fire_id })), coupon_code: appliedCoupon?.code ?? null });
+        const body = await createPublicOrder({ customer: customerPayload, items: orderItems.map(i => ({ product_id: i.product_id, variant_id: i.variant_id ?? null, quantity: i.quantity })), coupon_code: appliedCoupon?.code ?? null });
         createdOrderResp = { orderId: body.orderId, total: body.total };
       }
 
@@ -190,7 +194,6 @@ export function CheckoutPage() {
   if (step === 'success') {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16 text-center">
-        <div><label className="label">E-mail</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} className="input" required /></div><div><label className="label">Con[...]</div>
         <div className="mb-6 inline-flex items-center justify-center w-full">
           <CheckCircle2 className="h-10 w-10 text-success-400" />
         </div>
@@ -318,15 +321,16 @@ export function CheckoutPage() {
           <h3 className="text-sm font-semibold text-white mb-4">Seu pedido</h3>
           <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
             {items.map(i => (
-              <div key={i.product.id} className="flex items-center gap-2 text-sm">
+              <div key={itemKey(i)} className="flex items-center gap-2 text-sm">
                 <div className="h-10 w-10 rounded-lg overflow-hidden bg-ink-900 shrink-0">
                   {i.product.images[0] ? <img src={i.product.images[0]} alt="" className="h-full w-full object-cover" /> : <Package className="h-5 w-5 text-ink-500 m-2" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-white text-xs truncate">{i.product.name}</p>
+                  {i.variant_name && <p className="text-neon-300 text-xs truncate">{i.variant_name}</p>}
                   <p className="text-ink-400 text-xs">x{i.quantity}</p>
                 </div>
-                <span className="text-neon-300 text-xs font-semibold">{formatBRL((i.product.promo_price ?? i.product.price) * i.quantity)}</span>
+                <span className="text-neon-300 text-xs font-semibold">{formatBRL(itemUnitPrice(i) * i.quantity)}</span>
               </div>
             ))}
           </div>

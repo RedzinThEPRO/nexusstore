@@ -169,7 +169,7 @@ export function getNotifications(userId: string): Notification[] {
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 export function saveNotifications(n: Notification[]): void { write(STORE_KEYS.notifications, n); }
-export function addNotification(n: Notification[]): void {
+export function addNotification(n: Notification): void {
   const list = read<Notification[]>(STORE_KEYS.notifications, []);
   list.push(n); saveNotifications(list);
 }
@@ -240,7 +240,7 @@ export function getPixPaymentStatus(providerId: string): Promise<{ id: string; s
 }
 
 // ---- Public (guest) endpoints - no auth required ----
-export async function createPublicOrder(payload: { customer: { fullName: string; cpf: string; birthDate: string; email: string; phone: string; freeFireId?: string | null }; items: { product_id: string; quantity: number; free_fire_id?: string | null }[]; coupon_code?: string | null }) {
+export async function createPublicOrder(payload: { customer: { fullName: string; cpf: string; birthDate: string; email: string; phone: string; freeFireId?: string | null }; items: { product_id: string; variant_id?: string | null; quantity: number }[]; coupon_code?: string | null }) {
   if (!backendUrl) throw new Error('Backend não configurado.');
   const res = await fetch(backendUrl + '/api/public/orders', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
