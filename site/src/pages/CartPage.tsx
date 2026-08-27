@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { useCart } from '@/context/CartContext';
+import { useCart, itemKey, itemUnitPrice, itemStock } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
 import { formatBRL } from '@/lib/format';
 import { EmptyState, Toast } from '@/components/ui';
@@ -41,9 +41,11 @@ export function CartPage() {
         {/* Items */}
         <div className="space-y-3">
           {items.map(item => {
-            const price = item.product.promo_price ?? item.product.price;
+            const price = itemUnitPrice(item);
+            const key = itemKey(item);
+            const stock = itemStock(item);
             return (
-              <div key={item.product.id} className="card p-4 flex gap-4">
+              <div key={key} className="card p-4 flex gap-4">
                 <Link to={`/produto/${item.product.slug}`} className="shrink-0">
                   <div className="h-20 w-20 rounded-xl overflow-hidden bg-ink-900">
                     {item.product.images[0] ? (
@@ -58,12 +60,15 @@ export function CartPage() {
                   <Link to={`/produto/${item.product.slug}`} className="text-sm font-semibold text-white hover:text-neon-300 line-clamp-1">
                     {item.product.name}
                   </Link>
+                  {item.variant_name && (
+                    <p className="text-xs text-neon-300 mt-0.5">Opção: {item.variant_name}</p>
+                  )}
                   <p className="text-xs text-ink-400 mt-0.5">{item.product.game}</p>
                   <p className="text-neon-300 font-bold text-sm mt-1">{formatBRL(price)}</p>
 
                   {item.product.requires_free_fire_id && (
                     <div className="mt-2">
-                      <input value={item.free_fire_id ?? ''} onChange={e => setFreeFireId(item.product.id, e.target.value)}
+                      <input value={item.free_fire_id ?? ''} onChange={e => setFreeFireId(key, e.target.value)}
                         placeholder="ID do Free Fire" className="input py-1.5 text-xs" />
                     </div>
                   )}
@@ -71,15 +76,16 @@ export function CartPage() {
 
                 <div className="flex flex-col items-end gap-2">
                   <div className="flex items-center gap-1">
-                    <button onClick={() => setQty(item.product.id, item.quantity - 1)} className="grid h-7 w-7 place-items-center rounded-lg hover:bg-white/5 text-ink-200">
+                    <button onClick={() => setQty(key, item.quantity - 1)} className="grid h-7 w-7 place-items-center rounded-lg hover:bg-white/5 text-ink-200">
                       <Minus className="h-3 w-3" />
                     </button>
                     <span className="w-8 text-center text-white text-sm font-semibold">{item.quantity}</span>
-                    <button onClick={() => setQty(item.product.id, item.quantity + 1)} className="grid h-7 w-7 place-items-center rounded-lg hover:bg-white/5 text-ink-200">
+                    <button onClick={() => setQty(key, Math.min(stock, item.quantity + 1))} disabled={item.quantity >= stock}
+                      className="grid h-7 w-7 place-items-center rounded-lg hover:bg-white/5 text-ink-200 disabled:opacity-40 disabled:cursor-not-allowed">
                       <Plus className="h-3 w-3" />
                     </button>
                   </div>
-                  <button onClick={() => remove(item.product.id)} className="text-danger-400 hover:text-danger-300">
+                  <button onClick={() => remove(key)} className="text-danger-400 hover:text-danger-300">
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>

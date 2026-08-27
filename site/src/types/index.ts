@@ -11,6 +11,7 @@ export interface Profile {
   last_name?: string;
   cpf?: string;
   birth_date?: string;
+  phone?: string;
   role: UserRole;
   created_at: string;
   updated_at: string;
@@ -55,6 +56,7 @@ export interface Product {
   status: 'ACTIVE' | 'INACTIVE';
   type: 'DIGITAL' | 'PHYSICAL' | 'SERVICE';
   requires_free_fire_id: boolean;
+  allow_quantity_selection?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -63,6 +65,8 @@ export interface CartItem {
   product: Product;
   quantity: number;
   free_fire_id?: string;
+  variant_id?: string;
+  variant_name?: string;
 }
 
 export type OrderStatus = 'PENDING' | 'PAID' | 'EXPIRED' | 'REFUSED' | 'CANCELLED' | 'REFUNDED' | 'DELIVERED';
@@ -77,6 +81,8 @@ export interface OrderItem {
   price: number;
   quantity: number;
   free_fire_id?: string;
+  variant_id?: string;
+  variant_name?: string;
 }
 
 export interface Order {
